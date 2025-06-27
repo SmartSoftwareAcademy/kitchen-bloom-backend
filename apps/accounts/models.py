@@ -1,7 +1,7 @@
 from email.policy import default
 import uuid
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager, Permission
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
@@ -100,7 +100,11 @@ class User(AbstractBaseUser, PermissionsMixin, TimestampedModel, UserMixin):
     class Meta:
         verbose_name = _('user')
         verbose_name_plural = _('users')
-    
+        indexes = [
+            models.Index(fields=['last_login']),
+            models.Index(fields=['email']),
+        ]
+
     def __str__(self):
         return self.get_full_name() or self.email
     
@@ -145,45 +149,97 @@ class User(AbstractBaseUser, PermissionsMixin, TimestampedModel, UserMixin):
         
     def get_all_permissions(self, obj=None):
         """
-        Return a list of permission strings that the user has, both through group and user permissions.
+        Return a set of permission strings (app_label.codename) that the user has.
+        For superusers, returns an empty set (but has_perm/has_module_perms will still return True).
         """
-        if not hasattr(self, '_perm_cache') or not self._perm_cache:
+        if not hasattr(self, '_perm_cache'):
             from django.contrib.auth.models import Permission
-            
+
             if self.is_anonymous or not self.is_active:
-                return set()
-                
+                self._perm_cache = set()
+                return self._perm_cache
+
+            # For superusers, we don't need to load all permissions
             if self.is_superuser:
-                perms = Permission.objects.all()
-            else:
-                perms = set()
-                # Get role permissions
-                if self.role:
-                    perms.update(self.role.permissions.all())
-                # Get user permissions
-                perms.update(self.user_permissions.all())
-                # Get group permissions
-                perms.update(Permission.objects.filter(group__user=self))
-            
-            # Convert to the format expected by Django's permission system: 'app_label.permission_codename'
-            self._perm_cache = {
-                f"{perm.content_type.app_label}.{perm.codename}" 
-                for perm in perms
-            }
-            
+                self._perm_cache = set()
+                return self._perm_cache
+
+            perms = set()
+
+            # Get role permissions (if role exists)
+            if self.role_id:  # Use ID to avoid fetching the full role
+                perms.update(
+                    Permission.objects.filter(role_permissions__id=self.role_id)
+                    .values_list('content_type__app_label', 'codename')
+                )
+
+            # Get user permissions
+            perms.update(
+                self.user_permissions.values_list('content_type__app_label', 'codename')
+            )
+
+            # Get group permissions
+            perms.update(
+                Permission.objects.filter(group__user=self)
+                .values_list('content_type__app_label', 'codename')
+            )
+
+            # Convert to "app_label.codename" format
+            self._perm_cache = {f"{app_label}.{codename}" for app_label, codename in perms}
+
         return self._perm_cache
-        
+
     def has_module_perms(self, app_label):
         """Check if user has any permissions for the given app."""
         if self.is_superuser:
+            return True  # Superusers have all permissions
+
+        # Check cached permissions
+        perms = self.get_all_permissions()
+        
+        # Check if any permission starts with the app_label
+        return any(p.startswith(f"{app_label}.") for p in perms)
+
+    def has_perm(self, perm, obj=None):
+        """Check if user has a specific permission."""
+        if self.is_superuser:
             return True
-            
-        return any(
-            perm.content_type.app_label == app_label 
-            for perm in self.get_all_permissions()
-        )
 
+        # First check the permission cache
+        perms = self.get_all_permissions()
+        if perm in perms:
+            return True
 
+        # If not in cache, do direct checks (more efficient than loading all permissions)
+        try:
+            app_label, codename = perm.split('.')
+        except ValueError:
+            return False
+
+        # Check role permissions
+        if self.role_id and self.role.permissions.filter(
+            content_type__app_label=app_label,
+            codename=codename
+        ).exists():
+            return True
+
+        # Check user permissions
+        if self.user_permissions.filter(
+            content_type__app_label=app_label,
+            codename=codename
+        ).exists():
+            return True
+
+        # Check group permissions
+        if Permission.objects.filter(
+            group__user=self,
+            content_type__app_label=app_label,
+            codename=codename
+        ).exists():
+            return True
+
+        return False
+    
 class OTP(TimestampedModel):
     """
     One-Time Password model for email/phone verification and password reset.

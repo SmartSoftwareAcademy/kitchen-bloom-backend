@@ -15,7 +15,8 @@ from corsheaders.defaults import default_headers
 import dj_database_url
 from urllib.parse import urlparse
 import logging
-
+import django_redis
+from django.core.cache import cache
 logger = logging.getLogger(__name__)
 
 
@@ -26,39 +27,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, os.path.join(BASE_DIR, '..', 'apps'))
 
 # Custom Unicode-safe console handler
-class UnicodeSafeStreamHandler(logging.StreamHandler):
-    """A StreamHandler that safely handles Unicode characters on Windows."""
-    
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            stream = self.stream
-            
-            # For Windows console, handle Unicode properly
-            if hasattr(stream, 'buffer'):
-                # Use the underlying buffer for binary writing
-                stream.buffer.write(msg.encode('utf-8'))
-                stream.buffer.flush()
-            else:
-                # Fallback to regular write
-                stream.write(msg)
-                stream.flush()
-        except UnicodeEncodeError:
-            # If Unicode encoding fails, try to encode with error handling
-            try:
-                msg = self.format(record)
-                stream = self.stream
-                if hasattr(stream, 'buffer'):
-                    stream.buffer.write(msg.encode('utf-8', errors='replace'))
-                    stream.buffer.flush()
-                else:
-                    stream.write(msg.encode('utf-8', errors='replace').decode('utf-8'))
-                    stream.flush()
-            except Exception:
-                self.handleError(record)
-        except Exception:
-            self.handleError(record)
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -138,6 +106,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'crum.CurrentRequestUserMiddleware',
     'apps.base.middleware.SeedDefaultConfigsMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware', # Cache middleware
 ]
 
 # MFA settings
@@ -265,12 +234,13 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:ZlaOXwlvqjDUqlBcOpXIkODrLPiLrEVb@nozomi.proxy.rlwy.net:23252/railway')
-logger.info(f"Using DATABASE_URL: {db_url}")
-#print(os.environ['DATABASE_URL'])
+#logger.info(f"Using DATABASE_URL: {db_url}")
+# settings.py
 DATABASES = {
     'default': dj_database_url.config(
-        default=db_url, 
-        conn_max_age=600, 
+        default=db_url,
+        conn_max_age=600,
+        conn_health_checks=True,  # Enable connection health checks
         ssl_require=True
     )
 }
@@ -325,77 +295,28 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
         'simple': {
             'format': '{levelname} {message}',
             'style': '{',
         },
-        'detailed': {
-            'format': '{levelname} {asctime} {name} {module} {funcName} {lineno} {message}',
-            'style': '{',
-        },
-    },
-    'filters': {
-        'require_debug_true': {
-            '()': 'django.utils.log.RequireDebugTrue',
-        },
     },
     'handlers': {
         'console': {
-            'level': 'INFO',
-            'filters': ['require_debug_true'],
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-            'stream': 'ext://sys.stdout'
-        },
-        'file': {
-            'level': 'ERROR',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/error.log'),
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
-            'backupCount': 5,
             'formatter': 'verbose',
-            'encoding': 'utf-8',
-        },
-        'signals_file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/signals.log'),
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
-            'backupCount': 5,
-            'formatter': 'detailed',
-            'encoding': 'utf-8',
         },
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
             'propagate': True,
-        },
-        'apps': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
-            'propagate': True,
-        },
-        'apps.inventory.signals': {
-            'handlers': ['console', 'signals_file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'apps.sales.signals': {
-            'handlers': ['console', 'signals_file'],
-            'level': 'DEBUG',
-            'propagate': False,
         },
     },
 }
-
-# Create logs directory if it doesn't exist
-os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
-
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -466,20 +387,16 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
+WHITENOISE_MAX_AGE = 31536000  # 1 year cache
+ADMIN_SITE_CACHE_TIMEOUT = 60 * 5  # 5 minutes
 # Media files (Uploads)
-if DEBUG:
-    MEDIA_URL = '/media/'
-    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-else:
-    # settings.py
-    CLOUDINARY_STORAGE = {
-        'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'dvynnjixc'),
-        'API_KEY': os.environ.get('CLOUDINARY_API_KEY', '153798342855752'),
-        'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', 'QL2NLOUV3d0OkRLpMkuKnsCzwsE'),
-    }
-    MEDIA_URL = '/media/'
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'dvynnjixc'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY', '153798342855752'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', 'QL2NLOUV3d0OkRLpMkuKnsCzwsE'),
+}
+MEDIA_URL = '/media/'
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Channels ASGI application
 ASGI_APPLICATION = 'config.routing.application'
@@ -493,6 +410,38 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+# Cache settings
+# Use Redis for caching if available, otherwise fallback to local memory cache
+# First try Redis, fallback to local memory cache
+if os.environ.get('REDIS_URL'):
+    try:
+        CACHES = {
+            "default": {
+                "BACKEND": "django_redis.cache.RedisCache",
+                "LOCATION": os.environ['REDIS_URL'],
+                "OPTIONS": {
+                    "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                    "CONNECTION_POOL_KWARGS": {"max_connections": 100}
+                }
+            }
+        }
+        print("Using Redis cache backend")  # For debugging
+    except ImportError:
+        print("django-redis not available, falling back to local memory cache")
+        CACHES = {
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "unique-snowflake",
+            }
+        }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
+    }
 
 # Email settings (for OTP)
 EMAIL_BACKEND = os.environ.get(
