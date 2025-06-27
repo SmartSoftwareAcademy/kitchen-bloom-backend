@@ -157,25 +157,28 @@ MFA_SMS_PROVIDER_USERNAME = os.environ.get('MFA_SMS_PROVIDER_USERNAME')
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://*.nevadapub.co.ke',
-    'https://*.vercel.app',
+    "https://nevadapub.co.ke",
+    "https://admin.nevadapub.co.ke",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.up.railway.app',
     'https://*.nevadapub.co.ke',
     'https://kitchen-bloom-backend-production.up.railway.app',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ]
-
 # Required for CSRF with cross-domain requests
-CORS_ALLOW_CREDENTIALS = True
-SESSION_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True  # Only send CSRF cookie over HTTPS
+SESSION_COOKIE_SECURE = True  # Only send session cookie over HTTPS
+CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-site requests
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-site requests
+
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
