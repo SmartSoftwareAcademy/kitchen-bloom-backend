@@ -13,6 +13,11 @@ import logging
 from .jazzmin import JAZZMIN_SETTINGS
 from corsheaders.defaults import default_headers
 import dj_database_url
+from urllib.parse import urlparse
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -237,29 +242,26 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-if 'DATABASE_URL' in os.environ:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=os.environ['DATABASE_URL'],
-            conn_max_age=600,  # Keep connections open for 10 minutes
-            ssl_require=True if os.environ.get('DATABASE_SSL', 'False') == 'True' else False
-        )
-    }
+database_url = os.getenv('DATABASE_URL', None)
+logger.info(f"Using DATABASE_URL: {database_url}")
+#print(os.environ['DATABASE_URL'])
+if database_url:
+   DATABASES = {
+    'default': dj_database_url.config(default=database_url, conn_max_age=600, ssl_require=True)
+}
 else:
-    # Fallback to default PostgreSQL settings if DATABASE_URL is not set
-    # This is useful for local development without Docker or environment variables
+    # Fall back to individual settings
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('POSTGRES_DB', 'kitchen_bloom'),
-            'USER': os.environ.get('POSTGRES_USER', 'postgres'),
-            'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'postgres'),
-            'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+            'NAME': os.getenv('POSTGRES_DB', 'kitchen_bloom'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
         }
     }
-
-
+  
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
@@ -448,9 +450,9 @@ if DEBUG:
 else:
     # settings.py
     CLOUDINARY_STORAGE = {
-        'CLOUD_NAME': 'your_cloud_name',
-        'API_KEY': 'your_api_key',
-        'API_SECRET': 'your_api_secret',
+        'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'dvynnjixc'),
+        'API_KEY': os.environ.get('CLOUDINARY_API_KEY', '153798342855752'),
+        'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', 'QL2NLOUV3d0OkRLpMkuKnsCzwsE'),
     }
     MEDIA_URL = '/media/'
     DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
