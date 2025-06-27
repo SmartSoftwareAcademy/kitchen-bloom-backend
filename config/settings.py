@@ -69,11 +69,13 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-*s6=s+r=n$jh-k
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 # ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,kitchen-bloom-backend-production.up.railway.app,*railway.app,*.vercel.app,*.nevadapub.co.ke').split(',')
 
 #jazzmin modals not working fix
 X_FRAME_OPTIONS = 'SAMEORIGIN'
-
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+SECURE_REFERRER_POLICY = 'same-origin'
 
 # Application definition
 
@@ -167,17 +169,20 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.up.railway.app',
-    'https://*.nevadapub.co.ke',
     'https://kitchen-bloom-backend-production.up.railway.app',
+    'https://admin.nevadapub.co.ke',
+    'https://nevadapub.co.ke',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
-# Required for CSRF with cross-domain requests
-CSRF_COOKIE_SECURE = True  # Only send CSRF cookie over HTTPS
-SESSION_COOKIE_SECURE = True  # Only send session cookie over HTTPS
-CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-site requests
-SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-site requests
+
+# Essential security settings
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-domain
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-domain
+CSRF_COOKIE_DOMAIN = '.nevadapub.co.ke'  # For shared cookies across subdomains
+CSRF_USE_SESSIONS = False  # Use cookie-based CSRF
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
