@@ -20,7 +20,7 @@
         shared-mime-info \
         && rm -rf /var/lib/apt/lists/*
     
-    COPY backend/requirements.txt ./requirements.txt
+    COPY requirements.txt ./requirements.txt
     
     RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
     
@@ -48,7 +48,7 @@
     COPY --from=builder /usr/local/bin /usr/local/bin
     
     # Copy project files
-    COPY backend /app
+    COPY . /app
     
     # Create static/media dirs
     RUN mkdir -p /app/staticfiles /app/media
@@ -57,7 +57,7 @@
     EXPOSE 8000
     
     # Entrypoint script for migrations, collectstatic, etc.
-    COPY backend/docker/entrypoint.sh /entrypoint.sh
+    COPY docker/entrypoint.sh /entrypoint.sh
     RUN chmod +x /entrypoint.sh
     
     # Default: daphne for ASGI (channels), fallback to gunicorn for WSGI
