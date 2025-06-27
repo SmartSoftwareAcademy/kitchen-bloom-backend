@@ -1,0 +1,88 @@
+{% extends 'reporting/base_pdf_template.html' %}
+{% block content %}
+
+    <div class="header">
+        <img src="{{ company_logo_url }}" alt="Company Logo" class="company-logo">
+        <h1 class="report-title">Profit Report</h1>
+        <div class="report-subtitle">
+            Period: {{ report_data.start_date|date:"F j, Y" }} - {{ report_data.end_date|date:"F j, Y" }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Key Profit Metrics</h2>
+        <div class="profit-metrics">
+            <div class="profit-card">
+                <div class="profit-card-title">Total Sales</div>
+                <div class="profit-card-value">${{ report_data.sales.total_sales|floatformat:"2" }}</div>
+                <div class="profit-card-percentage">{{ report_data.sales.order_count }} orders</div>
+            </div>
+            <div class="profit-card">
+                <div class="profit-card-title">COGS</div>
+                <div class="profit-card-value">${{ report_data.cogs.total_cogs|floatformat:"2" }}</div>
+                <div class="profit-card-percentage">{{ report_data.cogs.percentage|floatformat:"1" }}% of sales</div>
+            </div>
+            <div class="profit-card">
+                <div class="profit-card-title">Gross Profit</div>
+                <div class="profit-card-value">${{ report_data.gross_profit.amount|floatformat:"2" }}</div>
+                <div class="profit-card-percentage">{{ report_data.gross_profit.margin|floatformat:"1" }}% margin</div>
+            </div>
+            <div class="profit-card">
+                <div class="profit-card-title">Net Profit</div>
+                <div class="profit-card-value">${{ report_data.net_profit.amount|floatformat:"2" }}</div>
+                <div class="profit-card-percentage">{{ report_data.net_profit.margin|floatformat:"1" }}% margin</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Profit Trend</h2>
+        <div class="profit-trend">
+            <!-- Profit trend chart will be rendered here -->
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Expense Breakdown</h2>
+        <div class="expense-breakdown">
+            <!-- Expense breakdown chart will be rendered here -->
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Sales vs Expenses</h2>
+        <div class="chart-container">
+            <!-- Sales vs expenses comparison chart will be rendered here -->
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Expense Categories</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Amount</th>
+                    <th>Percentage of Expenses</th>
+                    <th>Percentage of Sales</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for category in report_data.expenses.categories %}
+                <tr>
+                    <td>{{ category.category }}</td>
+                    <td>${{ category.amount|floatformat:"2" }}</td>
+                    <td>{{ category.expense_percentage|floatformat:"1" }}%</td>
+                    <td>{{ category.sales_percentage|floatformat:"1" }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        Generated on {{ report_data.generated_at|date:"F j, Y H:i" }}
+        <br>
+        Page <span class="page">1</span> of <span class="pages">1</span>
+    </div>
+{% endblock %}

@@ -1,0 +1,101 @@
+# POS + KDS Full-Stack System Plan
+
+## Notes
+- Core backend foundation established: models refactored, circular imports fixed, initial migrations tested.
+- Jazzmin installed and configured; advanced admin.py for accounts and base apps implemented.
+- Note: Do not register abstract base models with Django admin; only register concrete models.
+- Stack: Django DRF (backend), Vue.js (frontend), modular app structure.
+- Continue with modular feature implementation as per requirements.
+- Project scope and features defined: full-stack, modular, multi-branch POS + KDS system with advanced reporting, extensibility, and mobile/PWA support (see user requirements).
+- Backend utilities, middleware, and communication config models (EmailConfig, SMSSettings) created and registered in admin.
+- JWT authentication settings and utilities added to backend (base/utils.py, settings.py)
+- JWT authentication endpoints integrated and linting issues resolved
+- OTP model enhanced (attempt tracking, expiry, verification fields); migrations applied
+- OTP/email verification backend utilities implemented in base/utils.py
+- OTP/email verification endpoints and flows implemented in backend (views_otp.py, urls.py)
+- Authentication/OTP serializers implemented and exposed via __init__.py
+- RBAC/permissions utilities implemented (accounts/permissions.py)
+- Management command for default roles/permissions setup implemented
+- Role/permission management API endpoints and serializers implemented (views_roles.py, serializers_roles.py)
+- Accounts app URLs updated to include role/permission endpoints
+- RBAC system comprehensively tested (test_rbac.py, test_management_commands.py)
+- Backend RBAC/auth complete; ready to begin frontend Vue 3 development
+- Frontend will be initialized using npm/Vite commands as preferred
+- Frontend Vue 3 + Vite project created with TypeScript (user preference)
+- PostCSS/Tailwind config updated: using @tailwindcss/postcss as required by latest plugin separation; Vite and PostCSS configs fixed for compatibility.
+- PostCSS config migrated to ES module format (`export default`) due to "type": "module" in package.json; needed for Vite + Tailwind in this setup.
+- Tailwind CSS config migrated to ES module format (`export default`) for compatibility with "type": "module" in package.json and Vite/Tailwind.
+- Fixed invalid end tag and cleaned up misplaced CSS in App.vue (Vue SFC style section).
+- Toast notification system (toast.ts, Toast.vue, Toaster.vue, use-toast.ts, index.ts) added to resolve missing import and enable UI toasts.
+- Utility functions (utils.ts) and theme composable (useTheme.ts) added for UI and toast infrastructure.
+- ScrollArea UI component (scroll-area/ScrollArea.vue, index.ts) added to resolve missing import in AppSidebar.vue and provide reusable scrollable container for sidebar and other UI elements.
+- Accordion UI component suite (accordion/Accordion.vue, AccordionItem.vue, AccordionTrigger.vue, AccordionContent.vue, index.ts) added to resolve missing import in AppSidebar.vue and support sidebar navigation structure.
+- Button UI component (button/Button.vue, index.ts) added to resolve missing import in AppSidebar.vue and provide reusable button element for UI actions.
+- User and Roles API modules (api/user.ts, api/roles.ts) added to provide user profile, session, and RBAC API access for frontend authentication and role management flows.
+- DropdownMenu UI component suite (dropdown-menu/DropdownMenu.vue, DropdownMenuTrigger.vue, DropdownMenuContent.vue, DropdownMenuItem.vue, DropdownMenuLabel.vue, DropdownMenuSeparator.vue, index.ts) added to resolve missing import in AppNavbar.vue and provide accessible dropdown menu interactions for user/account actions.
+- Avatar UI component suite (avatar/Avatar.vue, AvatarImage.vue, AvatarFallback.vue, index.ts) added to resolve missing import in AppNavbar.vue and provide reusable avatar element for user profile display.
+- Card UI component suite (card/Card.vue, CardHeader.vue, CardTitle.vue, CardDescription.vue, CardContent.vue, CardFooter.vue, index.ts) added to resolve missing imports in DashboardView and provide reusable card containers for dashboard and other UI.
+- Skeleton UI component (skeleton/Skeleton.vue, index.ts) added to resolve missing import in DashboardView and provide loading skeletons for async data.
+- Label and Input UI components (label/Label.vue, index.ts, input/Input.vue, index.ts) added to resolve missing imports in authentication forms and LoginView, supporting form input and labeling across the app.
+
+## Task List
+- [x] Refactor and stabilize base models and user management (resolve circular imports)
+- [x] Validate migrations and initial Django setup
+- [x] Implement advanced admin.py for each app (with Jazzmin support)
+- [x] Install and configure Jazzmin for Django admin styling
+- [x] Implement backend utilities (base/utils.py), middleware, and communication config models (EmailConfig, SMSSettings)
+- [ ] Authentication & User Management features
+  - [x] Backend
+    - [ ] Custom User model (finalize fields for biometrics, SSO, etc.)
+    - [x] JWT authentication
+    - [x] Email verification (send OTP via email)
+    - [x] OTP system (SMS integration)
+    - [x] Authentication/OTP serializers (backend, package-level exposure)
+    - [x] Role/permission management (Admin/Manager/Waiter/Kitchen Staff/Accountant)
+    - [x] Role/permission management API endpoints (admin)
+    - [x] RBAC system tests (roles, permissions, management commands)
+    - [ ] SSO (internal, multi-branch)
+    - [ ] Biometrics (WebAuthn fields, API integration)
+  - [ ] Frontend
+    - [x] Vue 3 + Vite setup (use npm create vite@latest)
+    - [x] Scaffold project structure (components, views, stores, router, etc.)
+    - [x] Configure Tailwind CSS, shadcn/ui, and base theme
+    - [x] Set up Vue Router (with protected routes)
+    - [x] Set up Pinia store (with persisted state)
+    - [x] Set up API client (Axios) and authentication store
+    - [x] Install and configure frontend dependencies (tailwindcss, postcss, autoprefixer, vue-query, vueuse, axios, pinia, router, lucide-vue-next, etc.)
+    - [x] Create HomeView (dashboard landing page)
+    - [x] Create NotFoundView (404 page)
+    - [x] Create AuthLayout (authentication layout)
+    - [x] Login/register/OTP/password reset forms
+    - [x] Create AppLayout (main layout with sidebar/navbar/footer)
+    - [x] Integrate AppSidebar and AppNavbar components
+    - [x] Fix PostCSS/Tailwind plugin config for latest stack
+    - [x] Complete main Vue app setup and plugin initialization
+    - [x] Toast notification infrastructure (toast.ts, Toast.vue, Toaster.vue, use-toast.ts, index.ts)
+    - [x] Utility functions (utils.ts) and theme composable (useTheme.ts)
+    - [x] ScrollArea UI component (scroll-area/ScrollArea.vue, index.ts)
+    - [x] Accordion UI component suite (accordion/Accordion.vue, AccordionItem.vue, AccordionTrigger.vue, AccordionContent.vue, index.ts)
+    - [x] Button UI component (button/Button.vue, index.ts)
+    - [x] User and Roles API modules (api/user.ts, api/roles.ts)
+    - [x] DropdownMenu UI component suite (dropdown-menu/DropdownMenu.vue, DropdownMenuTrigger.vue, DropdownMenuContent.vue, DropdownMenuItem.vue, DropdownMenuLabel.vue, DropdownMenuSeparator.vue, index.ts)
+    - [x] Avatar UI component suite (avatar/Avatar.vue, AvatarImage.vue, AvatarFallback.vue, index.ts)
+    - [x] Card UI component suite (card/Card.vue, CardHeader.vue, CardTitle.vue, CardDescription.vue, CardContent.vue, CardFooter.vue, index.ts)
+    - [x] Skeleton UI component (skeleton/Skeleton.vue, index.ts)
+    - [x] Label and Input UI components (label/Label.vue, index.ts, input/Input.vue, index.ts)
+    - [ ] Biometrics UI integration
+    - [ ] SSO UI flow
+- [ ] Inventory Management features
+- [ ] Sales & POS features
+- [ ] Kitchen Display System (KDS) features
+- [ ] Employee Management features
+- [ ] Loyalty & Gift Cards features
+- [ ] Table Management features
+- [ ] Reporting & Analytics features
+- [ ] Expenses & Accounting features
+- [ ] Multi-branch & Multi-language/Currency features
+- [ ] Online Ordering features
+- [ ] Mobile/PWA features
+
+## Current Goal
+Implement authentication forms and flows

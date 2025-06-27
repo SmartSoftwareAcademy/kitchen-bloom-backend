@@ -1,0 +1,95 @@
+{% extends "reporting/base_pdf_template.html" %}
+
+{% block title %}Stock Taking Report{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <h1>Stock Taking Report</h1>
+    <p class="report-meta">Generated on: {{ report_data.generated_at|date:"F j, Y" }}</p>
+    {% if report_data.as_of %}
+    <p class="report-meta">As of: {{ report_data.as_of|date:"F j, Y" }}</p>
+    {% endif %}
+</div>
+
+<div class="report-section">
+    <h2>Current Stock Levels</h2>
+    {% if report_data.stock_items %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Current Stock</th>
+                <th>Unit Cost</th>
+                <th>Total Value</th>
+                <th>Location</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data.stock_items %}
+            <tr>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.category_name }}</td>
+                <td>{{ item.current_stock }}</td>
+                <td>{{ item.unit_cost|floatformat:2 }}</td>
+                <td>{{ item.total_value|floatformat:2 }}</td>
+                <td>{{ item.location_name|default:"N/A" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No stock items found.</p>
+    {% endif %}
+</div>
+
+<div class="report-summary">
+    <h2>Summary</h2>
+    <div class="summary-stats">
+        <div class="stat-item">
+            <span class="stat-label">Total Products:</span>
+            <span class="stat-value">{{ report_data.summary.total_products }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Stock Value:</span>
+            <span class="stat-value">{{ report_data.summary.total_value|floatformat:2 }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Average Stock Level:</span>
+            <span class="stat-value">{{ report_data.summary.avg_stock_level|floatformat:1 }}</span>
+        </div>
+        {% if report_data.summary.low_stock_count %}
+        <div class="stat-item">
+            <span class="stat-label">Low Stock Items:</span>
+            <span class="stat-value">{{ report_data.summary.low_stock_count }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if report_data.by_category %}
+<div class="report-section">
+    <h2>Stock by Category</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Product Count</th>
+                <th>Total Stock</th>
+                <th>Total Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for category in report_data.by_category %}
+            <tr>
+                <td>{{ category.category_name }}</td>
+                <td>{{ category.product_count }}</td>
+                <td>{{ category.total_stock }}</td>
+                <td>{{ category.total_value|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %} 

@@ -1,0 +1,86 @@
+{% extends "reporting/base_pdf_template.html" %}
+
+{% block title %}Stock Alerts Report{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <h1>Stock Alerts Report</h1>
+    <p class="report-meta">Generated on: {{ report_data.generated_at|date:"F j, Y" }}</p>
+</div>
+
+<div class="report-section">
+    <h2>Low Stock Items</h2>
+    {% if report_data.low_stock_items %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Current Stock</th>
+                <th>Min Threshold</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data.low_stock_items %}
+            <tr>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.category_name }}</td>
+                <td>{{ item.current_stock }}</td>
+                <td>{{ item.min_threshold }}</td>
+                <td class="status-{{ item.status|lower }}">{{ item.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No low stock items found.</p>
+    {% endif %}
+</div>
+
+<div class="report-section">
+    <h2>Out of Stock Items</h2>
+    {% if report_data.out_of_stock_items %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Last Stock Date</th>
+                <th>Supplier</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data.out_of_stock_items %}
+            <tr>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.category_name }}</td>
+                <td>{{ item.last_stock_date|date:"M j, Y" }}</td>
+                <td>{{ item.supplier_name|default:"N/A" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No out of stock items found.</p>
+    {% endif %}
+</div>
+
+<div class="report-summary">
+    <h2>Summary</h2>
+    <div class="summary-stats">
+        <div class="stat-item">
+            <span class="stat-label">Total Low Stock Items:</span>
+            <span class="stat-value">{{ report_data.summary.total_low_stock }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Out of Stock Items:</span>
+            <span class="stat-value">{{ report_data.summary.total_out_of_stock }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Threshold Used:</span>
+            <span class="stat-value">{{ report_data.summary.threshold }}%</span>
+        </div>
+    </div>
+</div>
+{% endblock %} 

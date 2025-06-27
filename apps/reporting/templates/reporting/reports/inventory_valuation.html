@@ -1,0 +1,119 @@
+{% extends "reporting/base_pdf_template.html" %}
+
+{% block title %}Inventory Valuation Report{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <h1>Inventory Valuation Report</h1>
+    <p class="report-meta">Generated on: {{ report_data.generated_at|date:"F j, Y" }}</p>
+    {% if report_data.as_of %}
+    <p class="report-meta">As of: {{ report_data.as_of|date:"F j, Y" }}</p>
+    {% endif %}
+</div>
+
+<div class="report-section">
+    <h2>Inventory Valuation</h2>
+    {% if report_data.valuation_items %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Current Stock</th>
+                <th>Unit Cost</th>
+                <th>Total Value</th>
+                <th>Last Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data.valuation_items %}
+            <tr>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.category_name }}</td>
+                <td>{{ item.current_stock }}</td>
+                <td>{{ item.unit_cost|floatformat:2 }}</td>
+                <td>{{ item.total_value|floatformat:2 }}</td>
+                <td>{{ item.last_updated|date:"M j, Y" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No inventory items found.</p>
+    {% endif %}
+</div>
+
+<div class="report-summary">
+    <h2>Summary</h2>
+    <div class="summary-stats">
+        <div class="stat-item">
+            <span class="stat-label">Total Products:</span>
+            <span class="stat-value">{{ report_data.summary.total_products }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Inventory Value:</span>
+            <span class="stat-value">{{ report_data.summary.total_value|floatformat:2 }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Average Unit Cost:</span>
+            <span class="stat-value">{{ report_data.summary.avg_unit_cost|floatformat:2 }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Stock Units:</span>
+            <span class="stat-value">{{ report_data.summary.total_stock_units }}</span>
+        </div>
+    </div>
+</div>
+
+{% if report_data.by_category %}
+<div class="report-section">
+    <h2>Valuation by Category</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Product Count</th>
+                <th>Total Stock</th>
+                <th>Total Value</th>
+                <th>% of Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for category in report_data.by_category %}
+            <tr>
+                <td>{{ category.category_name }}</td>
+                <td>{{ category.product_count }}</td>
+                <td>{{ category.total_stock }}</td>
+                <td>{{ category.total_value|floatformat:2 }}</td>
+                <td>{{ category.percentage|floatformat:1 }}%</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if report_data.value_distribution %}
+<div class="report-section">
+    <h2>Value Distribution</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Value Range</th>
+                <th>Product Count</th>
+                <th>Total Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for range in report_data.value_distribution %}
+            <tr>
+                <td>{{ range.range_label }}</td>
+                <td>{{ range.product_count }}</td>
+                <td>{{ range.total_value|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %} 

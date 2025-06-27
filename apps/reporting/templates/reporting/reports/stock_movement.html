@@ -1,0 +1,117 @@
+{% extends "reporting/base_pdf_template.html" %}
+
+{% block title %}Stock Movement Report{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <h1>Stock Movement Report</h1>
+    <p class="report-meta">Generated on: {{ report_data.generated_at|date:"F j, Y" }}</p>
+    {% if report_data.period %}
+    <p class="report-meta">Period: {{ report_data.period }}</p>
+    {% endif %}
+</div>
+
+<div class="report-section">
+    <h2>Stock Movements</h2>
+    {% if report_data.movements %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Product</th>
+                <th>Type</th>
+                <th>Quantity</th>
+                <th>Reference</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for movement in report_data.movements %}
+            <tr>
+                <td>{{ movement.date|date:"M j, Y" }}</td>
+                <td>{{ movement.product_name }}</td>
+                <td class="movement-{{ movement.type|lower }}">{{ movement.type }}</td>
+                <td>{{ movement.quantity }}</td>
+                <td>{{ movement.reference|default:"N/A" }}</td>
+                <td>{{ movement.notes|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No stock movements found for the specified period.</p>
+    {% endif %}
+</div>
+
+<div class="report-summary">
+    <h2>Summary</h2>
+    <div class="summary-stats">
+        <div class="stat-item">
+            <span class="stat-label">Total Movements:</span>
+            <span class="stat-value">{{ report_data.summary.total_movements }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total In:</span>
+            <span class="stat-value">{{ report_data.summary.total_in }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Out:</span>
+            <span class="stat-value">{{ report_data.summary.total_out }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Net Movement:</span>
+            <span class="stat-value">{{ report_data.summary.net_movement }}</span>
+        </div>
+    </div>
+</div>
+
+{% if report_data.by_type %}
+<div class="report-section">
+    <h2>Movements by Type</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Movement Type</th>
+                <th>Count</th>
+                <th>Total Quantity</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for type in report_data.by_type %}
+            <tr>
+                <td>{{ type.movement_type }}</td>
+                <td>{{ type.count }}</td>
+                <td>{{ type.total_quantity }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if report_data.by_product %}
+<div class="report-section">
+    <h2>Movements by Product</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Total In</th>
+                <th>Total Out</th>
+                <th>Net Movement</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in report_data.by_product %}
+            <tr>
+                <td>{{ product.product_name }}</td>
+                <td>{{ product.total_in }}</td>
+                <td>{{ product.total_out }}</td>
+                <td>{{ product.net_movement }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %} 

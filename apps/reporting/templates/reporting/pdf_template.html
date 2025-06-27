@@ -1,0 +1,96 @@
+{% extends "reporting/base_pdf_template.html" %}
+
+{% block content %}
+    <div class="metrics">
+        <div class="metric">
+            <div class="value">{{ data.metrics.total|default:0|floatformat:2 }}</div>
+            <div class="label">Total Sales</div>
+        </div>
+        <div class="metric">
+            <div class="value">{{ data.metrics.count|default:0 }}</div>
+            <div class="label">Orders</div>
+        </div>
+        <div class="metric">
+            <div class="value">{{ data.metrics.avg_order|default:0|floatformat:2 }}</div>
+            <div class="label">Avg. Order Value</div>
+        </div>
+    </div>
+
+    {% if data.time_series %}
+    <div class="section">
+        <h2>Sales Over Time</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>Total Sales</th>
+                    <th>Orders</th>
+                    <th>Avg. Order</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in data.time_series %}
+                <tr>
+                    <td>{{ item.period }}</td>
+                    <td>{{ item.total|default:0|floatformat:2 }}</td>
+                    <td>{{ item.count|default:0 }}</td>
+                    <td>{{ item.avg_order|default:0|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if data.top_items %}
+    <div class="section">
+        <h2>Top Selling Items</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Quantity Sold</th>
+                    <th>Total Revenue</th>
+                    <th>% of Sales</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in data.top_items %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.quantity|default:0 }}</td>
+                    <td>{{ item.revenue|default:0|floatformat:2 }}</td>
+                    <td>{{ item.percentage|default:0|floatformat:1 }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if data.payment_methods %}
+    <div class="section">
+        <h2>Payment Methods</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Payment Method</th>
+                    <th>Transactions</th>
+                    <th>Total Amount</th>
+                    <th>% of Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for method in data.payment_methods %}
+                <tr>
+                    <td>{{ method.name }}</td>
+                    <td>{{ method.count|default:0 }}</td>
+                    <td>{{ method.amount|default:0|floatformat:2 }}</td>
+                    <td>{{ method.percentage|default:0|floatformat:1 }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+{% endblock %}

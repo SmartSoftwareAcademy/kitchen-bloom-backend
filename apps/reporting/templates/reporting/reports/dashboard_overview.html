@@ -1,0 +1,137 @@
+{% extends "reporting/base_pdf_template.html" %}
+
+{% block title %}Dashboard Overview Report{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <h1>Dashboard Overview Report</h1>
+    <p class="report-meta">Generated on: {{ report_data.generated_at|date:"F j, Y" }}</p>
+    {% if report_data.period %}
+    <p class="report-meta">Period: {{ report_data.period }}</p>
+    {% endif %}
+</div>
+
+<div class="report-section">
+    <h2>Sales Summary</h2>
+    {% if report_data.sales_summary %}
+    <div class="summary-stats">
+        <div class="stat-item">
+            <span class="stat-label">Total Sales:</span>
+            <span class="stat-value">{{ report_data.sales_summary.totals.total_sales|floatformat:2 }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Orders:</span>
+            <span class="stat-value">{{ report_data.sales_summary.totals.order_count }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Average Order Value:</span>
+            <span class="stat-value">{{ report_data.sales_summary.totals.avg_order|floatformat:2 }}</span>
+        </div>
+    </div>
+
+    {% if report_data.sales_summary.time_series %}
+    <h3>Daily Sales Trend</h3>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Sales</th>
+                <th>Orders</th>
+                <th>Avg Order</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for day in report_data.sales_summary.time_series %}
+            <tr>
+                <td>{{ day.period|date:"M j, Y" }}</td>
+                <td>{{ day.total_sales|floatformat:2 }}</td>
+                <td>{{ day.order_count }}</td>
+                <td>{{ day.avg_order|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    {% endif %}
+</div>
+
+{% if report_data.top_products %}
+<div class="report-section">
+    <h2>Top Products</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Quantity Sold</th>
+                <th>Total Sales</th>
+                <th>% of Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in report_data.top_products.products %}
+            <tr>
+                <td>{{ product.product_name }}</td>
+                <td>{{ product.category_name }}</td>
+                <td>{{ product.quantity_sold }}</td>
+                <td>{{ product.total_sales|floatformat:2 }}</td>
+                <td>{{ product.percentage|floatformat:1 }}%</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if report_data.recent_orders %}
+<div class="report-section">
+    <h2>Recent Orders</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Order #</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in report_data.recent_orders %}
+            <tr>
+                <td>{{ order.order_number }}</td>
+                <td>{{ order.created_at|date:"M j, Y H:i" }}</td>
+                <td>{{ order.total_amount|floatformat:2 }}</td>
+                <td>{{ order.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="report-summary">
+    <h2>Key Metrics</h2>
+    <div class="summary-stats">
+        {% if report_data.sales_summary %}
+        <div class="stat-item">
+            <span class="stat-label">Total Revenue:</span>
+            <span class="stat-value">{{ report_data.sales_summary.totals.total_sales|floatformat:2 }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Total Orders:</span>
+            <span class="stat-value">{{ report_data.sales_summary.totals.order_count }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Average Order Value:</span>
+            <span class="stat-value">{{ report_data.sales_summary.totals.avg_order|floatformat:2 }}</span>
+        </div>
+        {% endif %}
+        {% if report_data.top_products %}
+        <div class="stat-item">
+            <span class="stat-label">Top Product:</span>
+            <span class="stat-value">{{ report_data.top_products.products.0.product_name }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 
