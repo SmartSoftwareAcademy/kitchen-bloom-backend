@@ -221,7 +221,16 @@ class Address(TimestampedModel):
     address_line2 = models.CharField(_('address line 2'), max_length=255, blank=True, null=True)
     city = models.CharField(_('city'), max_length=100)
     state = models.CharField(_('state/province/region'), max_length=100)
-    postal_code = models.CharField(_('postal code'),max_length=20,validators=[RegexValidator(regex='^[0-9a-zA-Z\-\s]*$',message=_("Enter a valid postal code (letters, numbers, spaces, and hyphens only)"),),])
+    postal_code = models.CharField(
+        _('postal code'),
+        max_length=20,
+        validators=[
+            RegexValidator(
+                regex=r'^[0-9a-zA-Z\-\s]*$',  # Use raw string
+                message=_("Enter a valid postal code (letters, numbers, spaces, and hyphens only)"),
+            ),
+        ]
+    )
     country = models.CharField(_('country'), max_length=100, default='Kenya')
     is_primary = models.BooleanField(_('is primary'), default=False)
     notes = models.TextField(_('notes'), blank=True, null=True)
