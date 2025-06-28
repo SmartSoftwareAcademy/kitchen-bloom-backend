@@ -236,7 +236,7 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:BeQqdEurSdEUggmlLxriaXXqksEWsoRh@shinkansen.proxy.rlwy.net:28785/railway')
+db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:NwdbkRvsAHXMbHBjHKZzXFfRRIdaBuaW@caboose.proxy.rlwy.net:55746/railway')
 #logger.info(f"Using DATABASE_URL: {db_url}")
 # settings.py
 DATABASES = {
