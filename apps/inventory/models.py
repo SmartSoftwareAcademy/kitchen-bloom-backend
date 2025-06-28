@@ -527,33 +527,8 @@ class BranchStock(TimestampedModel, SoftDeleteModel):
     """Tracks stock levels per branch for both products and menu items.
     This allows each branch to have different stock levels and pricing for the same product/menu item.
     """
-    # Content type fields for generic relation
-    content_type = models.ForeignKey(
-        'contenttypes.ContentType',
-        on_delete=models.CASCADE,
-        limit_choices_to={'model__in': ('product', 'menuitem')}
-    )
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey('content_type', 'object_id')
-    
-    # Explicit references for easier querying (optional but recommended)
-    product = models.ForeignKey(
-        Product,
-        on_delete=models.CASCADE,
-        related_name='branch_stock',
-        verbose_name=_('product'),
-        null=True,
-        blank=True
-    )
-    menu_item = models.ForeignKey(
-        'MenuItem',
-        on_delete=models.CASCADE,
-        related_name='branch_stock',
-        verbose_name=_('menu item'),
-        null=True,
-        blank=True
-    )
-    
+    product = models.ForeignKey(Product,on_delete=models.CASCADE,related_name='branch_stock',verbose_name=_('product'),null=True,blank=True)
+    menu_item = models.ForeignKey('MenuItem',on_delete=models.CASCADE,related_name='branch_stock',verbose_name=_('menu item'),null=True,blank=True)
     branch = models.ForeignKey(BranchModel, on_delete=models.CASCADE, related_name='stock_items', verbose_name=_('branch'))
     current_stock = models.DecimalField(_('current stock'), max_digits=10, decimal_places=3, default=0, validators=[MinValueValidator(0)])
     reorder_level = models.DecimalField(_('reorder level'), max_digits=10, decimal_places=3, default=0, validators=[MinValueValidator(0)])
@@ -565,11 +540,10 @@ class BranchStock(TimestampedModel, SoftDeleteModel):
     class Meta:
         verbose_name = _('branch stock')
         verbose_name_plural = _('branch stock')
-        unique_together = (('content_type', 'object_id', 'branch'),)
-        ordering = ('-content_type__model', 'branch__name')
+        ordering = ('branch__name',)
 
     def __str__(self):
-        owner_name = self.content_object.name if self.content_object else 'Unknown'
+        owner_name = self.product.name if self.product else self.menu_item.name
         return f"{owner_name} - {self.branch.name}: {self.current_stock}"
 
     def clean(self):

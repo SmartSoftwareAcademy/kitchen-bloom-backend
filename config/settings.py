@@ -130,28 +130,31 @@ MFA_SMS_PROVIDER_USERNAME = os.environ.get('MFA_SMS_PROVIDER_USERNAME')
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "https://nevadapub.co.ke",
-    "https://admin.nevadapub.co.ke",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    'https://kitchen-bloom-backend-production.up.railway.app',
+    'https://nevadapub.co.ke',
+    'https://admin.nevadapub.co.ke',
+    'http://localhost:8081',
+    'http://127.0.0.1:8081',
 ]
+
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     'https://kitchen-bloom-backend-production.up.railway.app',
     'https://admin.nevadapub.co.ke',
     'https://nevadapub.co.ke',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
 ]
 
-# Essential security settings
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-domain
-SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-domain
-CSRF_COOKIE_DOMAIN = '.nevadapub.co.ke'  # For shared cookies across subdomains
-CSRF_USE_SESSIONS = False  # Use cookie-based CSRF
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = True
+CSRF_USE_SESSIONS = False  
+
+# Remove or comment this unless you're 100% using *.nevadapub.co.ke
+# CSRF_COOKIE_DOMAIN = '.nevadapub.co.ke'
+
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
