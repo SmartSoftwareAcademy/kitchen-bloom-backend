@@ -1,17 +1,19 @@
-from django.db import models
-from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
-from django.core.validators import MinValueValidator
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+from django.db import models
 from django.db.models import Q, F, Sum
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import BaseNameDescriptionModel, TimestampedModel, SoftDeleteModel
+from apps.base.mixins import BarcodeMixin
 from apps.branches.models import Branch as BranchModel  # Renamed to avoid conflict
 from apps.crm.models import Customer
+
 
 User = get_user_model()
 
@@ -294,13 +296,13 @@ class Allergy(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_severity_display()})"
 
-class Product(TimestampedModel, SoftDeleteModel):
+class Product(BarcodeMixin, BaseNameDescriptionModel, TimestampedModel, SoftDeleteModel):
     """Product model for inventory items.
     Products are shared across branches but can have different stock levels per branch.
     """
     # Basic Information
     SKU = models.CharField(_('SKU'), max_length=50, unique=True)
-    barcode = models.CharField(_('barcode'), max_length=100, blank=True, unique=True)
+    barcode = models.CharField(_('barcode'), max_length=100, blank=True, unique=True, db_index=True)
     name = models.CharField(_('name'), max_length=200)
     description = models.TextField(_('description'), blank=True)
     
@@ -413,6 +415,11 @@ class Product(TimestampedModel, SoftDeleteModel):
     def __str__(self):
         return f"{self.name} ({self.SKU})"
     
+    def save(self, *args, **kwargs):
+        """Save the product, ensuring required fields are set."""
+        # Let BarcodeMixin handle barcode generation
+        super().save(*args, **kwargs)
+
     def get_stock_for_branch(self, branch):
         """Get stock level for a specific branch."""
         try:
@@ -488,11 +495,11 @@ class Product(TimestampedModel, SoftDeleteModel):
         """Return the KDS station type for this product."""
         return self.kds_station_type
 
-class ProductVariant(BaseNameDescriptionModel, TimestampedModel, SoftDeleteModel):
+class ProductVariant(BarcodeMixin, BaseNameDescriptionModel, TimestampedModel, SoftDeleteModel):
     """Product variant model for tracking different variants of a product."""
     product = models.ForeignKey(Product,on_delete=models.CASCADE,related_name='variants',verbose_name=_('product'))
     sku = models.CharField(_('SKU'),max_length=50,unique=True)
-    barcode = models.CharField(_('barcode'),max_length=100,blank=True,unique=True)
+    barcode = models.CharField(_('barcode'),max_length=100,blank=True,unique=True, db_index=True)
     name = models.CharField(_('name'),max_length=200)
     description = models.TextField(_('description'),blank=True)
     category = models.ForeignKey(Category,on_delete=models.SET_NULL,null=True,blank=True,related_name='variants',verbose_name=_('category'))
@@ -540,12 +547,15 @@ class BranchStock(TimestampedModel, SoftDeleteModel):
         return f"{self.product.name} at {self.branch.name}"
     
     def clean(self):
-        # Ensure branch and product's supplier belong to the same company
-        if hasattr(self, 'branch') and hasattr(self, 'product') and hasattr(self.product, 'supplier') and self.product.supplier:
-            if self.branch.company != self.product.supplier.company:
-                raise ValidationError({
-                    'branch': _('Branch and supplier must belong to the same company')
-                })
+        # Removed company validation since Supplier model doesn't have a company field
+        # If company validation is needed in the future, add a company field to the Supplier model
+        # and uncomment the following code:
+        # if hasattr(self, 'branch') and hasattr(self, 'product') and hasattr(self.product, 'supplier') and self.product.supplier:
+        #     if self.branch.company != self.product.supplier.company:
+        #         raise ValidationError({
+        #             'branch': _('Branch and supplier must belong to the same company')
+        #         })
+        pass
     
     def save(self, *args, **kwargs):
         # Set default prices from product if not set

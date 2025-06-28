@@ -146,8 +146,8 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # Essential security settings
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-domain
 SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-domain
 CSRF_COOKIE_DOMAIN = '.nevadapub.co.ke'  # For shared cookies across subdomains

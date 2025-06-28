@@ -14,6 +14,7 @@ from apps.branches.models import Branch
 from apps.crm.models import Customer
 from apps.accounts.models import User
 from apps.sales.models import Order, OrderItem
+from apps.base.mixins import generate_unique_barcode
 
 class Command(BaseCommand):
     help = 'Seed restaurant-specific data including categories, products, menus, and recipes'
@@ -454,7 +455,7 @@ class Command(BaseCommand):
         ]
         ingredients = []
         for ing_data in ingredients_data:
-            ing_data['barcode'] = ing_data['SKU']
+            ing_data['barcode'] = generate_unique_barcode('ING')
             ingredient, created = Product.objects.get_or_create(
                 SKU=ing_data['SKU'],
                 defaults=ing_data
@@ -510,7 +511,7 @@ class Command(BaseCommand):
         ]
         beverages = []
         for bev_data in beverages_data:
-            bev_data['barcode'] = bev_data['SKU']
+            bev_data['barcode'] = generate_unique_barcode('BEV')
             beverage, created = Product.objects.get_or_create(
                 SKU=bev_data['SKU'],
                 defaults=bev_data
@@ -546,7 +547,7 @@ class Command(BaseCommand):
         ]
         finished_products = []
         for fin_data in finished_products_data:
-            fin_data['barcode'] = fin_data['SKU']
+            fin_data['barcode'] = generate_unique_barcode('FIN')
             finished_product, created = Product.objects.get_or_create(
                 SKU=fin_data['SKU'],
                 defaults=fin_data
@@ -576,6 +577,12 @@ class Command(BaseCommand):
 
     def create_menu_items(self, menu, categories, ingredients, admin_user):
         """Create menu items with recipes."""
+        # First, ensure all ingredients have unique barcodes
+        for ingredient in ingredients:
+            if not ingredient.barcode:
+                ingredient.barcode = generate_unique_barcode('ING')
+                ingredient.save()
+
         menu_items_data = [
             {
                 'name': 'Caesar Salad',

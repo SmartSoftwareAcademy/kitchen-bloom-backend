@@ -72,13 +72,19 @@ class BranchStockSerializer(serializers.ModelSerializer):
         read_only_fields = ('created_at', 'updated_at')
 
 class ProductCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating products with images."""
+    """Serializer for creating products with images and initial stock."""
     images = serializers.ListField(
         child=serializers.ImageField(),
         required=False,
         write_only=True
     )
     default_image_index = serializers.IntegerField(required=False, write_only=True)
+    initial_stock = serializers.DictField(
+        child=serializers.DictField(child=serializers.DecimalField(max_digits=10, decimal_places=3)),
+        required=False,
+        write_only=True,
+        help_text="Initial stock levels by branch ID. Format: {'branch_id': {'current_stock': 10, 'reorder_level': 5}}"
+    )
     
     class Meta:
         model = Product
@@ -87,7 +93,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'supplier', 'unit_of_measure', 'cost_price', 'selling_price',
             'allergens', 'nutritional_info', 'is_available_for_sale', 'is_available_for_recipes',
             'is_active', 'notes', 'kds_station_type', 'track_batches', 'track_expiry',
-            'images', 'default_image_index'
+            'images', 'default_image_index', 'initial_stock'
         ]
         read_only_fields = ('created_at', 'updated_at')
     
@@ -97,15 +103,61 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             unit = data['unit_of_measure']
             # Remove validation for non-existent quantity field
             pass
+            
+        # Validate initial_stock data if provided
+        if 'initial_stock' in data:
+            from apps.branches.models import Branch
+            
+            initial_stock = data['initial_stock']
+            if not isinstance(initial_stock, dict):
+                raise serializers.ValidationError({
+                    'initial_stock': 'Must be a dictionary mapping branch IDs to stock data.'
+                })
+                
+            # Validate each branch's stock data
+            for branch_id, stock_data in initial_stock.items():
+                try:
+                    branch_id_int = int(branch_id)
+                    if not Branch.objects.filter(id=branch_id_int, is_active=True).exists():
+                        raise serializers.ValidationError({
+                            'initial_stock': f'Branch with ID {branch_id} does not exist or is inactive.'
+                        })
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError({
+                        'initial_stock': f'Invalid branch ID: {branch_id}. Must be an integer.'
+                    })
+                    
+                if not isinstance(stock_data, dict):
+                    raise serializers.ValidationError({
+                        'initial_stock': f'Stock data for branch {branch_id} must be a dictionary.'
+                    })
+                    
+                # Validate current_stock and reorder_level if provided
+                for field in ['current_stock', 'reorder_level']:
+                    if field in stock_data:
+                        try:
+                            value = stock_data[field]
+                            if value is not None:
+                                float(value)  # Will raise ValueError if not a number
+                        except (ValueError, TypeError):
+                            raise serializers.ValidationError({
+                                'initial_stock': f'{field} must be a number for branch {branch_id}.'
+                            })
                 
         return data
     
     def create(self, validated_data):
         images_data = validated_data.pop('images', [])
         default_image_index = validated_data.pop('default_image_index', 0)
+        initial_stock_data = validated_data.pop('initial_stock', {})
         
-        # Create the product
-        product = Product.objects.create(**validated_data)
+        # Attach initial stock data to the product instance for the signal handler
+        product = Product(**validated_data)
+        if initial_stock_data:
+            product._initial_stock_data = initial_stock_data
+        
+        # Save the product (this will trigger the post_save signal)
+        product.save()
         
         # Create product images
         for index, image in enumerate(images_data):
@@ -421,6 +473,17 @@ class InventoryAdjustmentSerializer(serializers.ModelSerializer):
         return instance
 
 # Restaurant-specific serializers
+class RecipeIngredientCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating recipe ingredients."""
+    class Meta:
+        model = RecipeIngredient
+        fields = ['ingredient', 'quantity', 'unit_of_measure', 'notes', 'is_optional']
+        extra_kwargs = {
+            'ingredient': {'required': True},
+            'quantity': {'required': True},
+            'unit_of_measure': {'required': True}
+        }
+
 class RecipeIngredientSerializer(serializers.ModelSerializer):
     ingredient_name = serializers.CharField(source='ingredient.name', read_only=True)
     ingredient_sku = serializers.CharField(source='ingredient.SKU', read_only=True)
@@ -472,58 +535,89 @@ class MenuItemSerializer(serializers.ModelSerializer):
         return []
 
 class MenuItemCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating menu items with images."""
+    """Serializer for creating menu items with images and recipes."""
     images = serializers.ListField(
         child=serializers.ImageField(),
         required=False,
         write_only=True
     )
     default_image_index = serializers.IntegerField(required=False, write_only=True)
+    recipe_ingredients = RecipeIngredientCreateSerializer(many=True, required=False)
+    recipe_instructions = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    cooking_time = serializers.DurationField(write_only=True, required=False, allow_null=True)
+    difficulty_level = serializers.ChoiceField(
+        write_only=True,
+        required=False,
+        choices=[
+            ('easy', 'Easy'),
+            ('medium', 'Medium'),
+            ('hard', 'Hard')
+        ],
+        default='medium'
+    )
+    servings = serializers.IntegerField(write_only=True, required=False, min_value=1, default=1)
     
     class Meta:
         model = MenuItem
         fields = [
             'id', 'menu', 'name', 'description', 'category', 'selling_price',
             'cost_price', 'preparation_time', 'is_available', 'is_featured',
-            'display_order', 'allergens', 'nutritional_info', 'images', 'default_image_index'
+            'display_order', 'allergens', 'nutritional_info', 'images', 'default_image_index',
+            'recipe_ingredients', 'recipe_instructions', 'cooking_time', 'difficulty_level', 'servings'
         ]
         read_only_fields = ('created_at', 'updated_at')
+        
+    def validate_recipe_ingredients(self, value):
+        """Validate that recipe ingredients have required fields."""
+        if not value:
+            return value
+            
+        for ingredient in value:
+            if 'ingredient' not in ingredient:
+                raise serializers.ValidationError("Each ingredient must have an 'ingredient' field.")
+            if 'quantity' not in ingredient or float(ingredient['quantity']) <= 0:
+                raise serializers.ValidationError("Each ingredient must have a positive 'quantity'.")
+            if 'unit_of_measure' not in ingredient:
+                raise serializers.ValidationError("Each ingredient must have a 'unit_of_measure'.")
+        return value
     
     def create(self, validated_data):
+        # Extract recipe data if provided
+        recipe_ingredients_data = validated_data.pop('recipe_ingredients', [])
+        recipe_instructions = validated_data.pop('recipe_instructions', '')
+        cooking_time = validated_data.pop('cooking_time', None)
+        difficulty_level = validated_data.pop('difficulty_level', 'medium')
+        servings = validated_data.pop('servings', 1)
+        
+        # Extract other data
         images_data = validated_data.pop('images', [])
         default_image_index = validated_data.pop('default_image_index', 0)
+        allergens_data = validated_data.pop('allergens', [])
         
         # Create the menu item
         menu_item = MenuItem.objects.create(**validated_data)
         
-        # Create product images for the menu item (menu items are also products)
-        # First, we need to get or create the associated product
-        product, created = Product.objects.get_or_create(
-            SKU=f"MI-{menu_item.id}",
-            defaults={
-                'name': menu_item.name,
-                'description': menu_item.description,
-                'product_type': 'finished_product',
-                'category': menu_item.category,
-                'cost_price': menu_item.cost_price,
-                'selling_price': menu_item.selling_price,
-                'is_available_for_sale': True,
-                'is_available_for_recipes': False,
-                'is_active': menu_item.is_available,
-                'kds_station_type': 'hot_kitchen',  # Default station
-            }
-        )
-        
-        # Create product images
-        for index, image in enumerate(images_data):
-            is_default = index == default_image_index
-            ProductImage.objects.create(
-                product=product,
-                image=image,
-                is_default=is_default,
-                is_active=True
+        # Set many-to-many relationships
+        if allergens_data:
+            menu_item.allergens.set(allergens_data)
+            
+        # Create recipe if ingredients are provided
+        if recipe_ingredients_data:
+            recipe = Recipe.objects.create(
+                menu_item=menu_item,
+                instructions=recipe_instructions,
+                cooking_time=cooking_time,
+                difficulty_level=difficulty_level,
+                servings=servings,
+                created_by=self.context['request'].user
             )
-        
+            
+            # Create recipe ingredients
+            for ingredient_data in recipe_ingredients_data:
+                RecipeIngredient.objects.create(recipe=recipe, **ingredient_data)
+            
+            # Update allergens from recipe ingredients
+            menu_item.update_allergens_from_recipe()
         return menu_item
 
 class MenuSerializer(serializers.ModelSerializer):

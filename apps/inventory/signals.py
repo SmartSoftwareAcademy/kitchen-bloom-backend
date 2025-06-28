@@ -1,6 +1,7 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
+from django.db import transaction
 import logging
 from .models import Product, MenuItem, BranchStock, InventoryTransaction, PurchaseOrder, InventoryAdjustment, StockTransfer
 
@@ -10,82 +11,74 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Product)
 def create_branch_stock_for_product(sender, instance, created, **kwargs):
-    """Automatically create BranchStock entries when a product is created."""
+    """
+    Automatically create BranchStock entries when a product is created.
+    If initial_stock is provided in the raw_post_data, use those values.
+    """
     if created:
+        from django.db import transaction
+        from apps.branches.models import Branch
+        
         logger.info(f"Creating branch stock for new product: {instance.name} (ID: {instance.id})")
         
-        # Get all active branches
-        from apps.branches.models import Branch
-        branches = Branch.objects.filter(is_active=True)
+        # Get initial stock data if it exists
+        initial_stock_data = getattr(instance, '_initial_stock_data', None)
         
-        logger.info(f"Found {branches.count()} active branches for stock creation")
-        
-        for branch in branches:
-            branch_stock, created = BranchStock.objects.get_or_create(
-                product=instance,
-                branch=branch,
-                defaults={
-                    'current_stock': 0,
-                    'reorder_level': 0,
-                    'cost_price': instance.cost_price,
-                    'selling_price': instance.selling_price,
-                    'is_active': True
-                }
-            )
+        if initial_stock_data:
+            # Process branches with initial stock data
+            branch_ids = [int(branch_id) for branch_id in initial_stock_data.keys()]
+            branches = Branch.objects.filter(id__in=branch_ids, is_active=True)
+            logger.info(f"Processing initial stock for {branches.count()} branches")
             
-            if created:
-                logger.info(f"Created branch stock for {instance.name} at {branch.name}: {branch_stock.current_stock} units")
-            else:
-                logger.debug(f"Branch stock already exists for {instance.name} at {branch.name}")
+            for branch in branches:
+                branch_data = initial_stock_data.get(str(branch.id), {})
+                BranchStock.objects.create(
+                    product=instance,
+                    branch=branch,
+                    current_stock=branch_data.get('current_stock', 1),
+                    reorder_level=branch_data.get('reorder_level', 1),
+                    cost_price=instance.cost_price,
+                    selling_price=instance.selling_price,
+                    is_active=True
+                )
+                logger.info(f"Created branch stock for {instance.name} at {branch.name} with initial stock: {branch_data}")
+        else:
+            # Default behavior: create stock entries with 0 for all active branches
+            branches = Branch.objects.filter(is_active=True)
+            logger.info(f"Creating default (zero) stock for {branches.count()} branches")
+            
+            for branch in branches:
+                BranchStock.objects.create(
+                    product=instance,
+                    branch=branch,
+                    current_stock=1,
+                    reorder_level=1,
+                    cost_price=instance.cost_price,
+                    selling_price=instance.selling_price,
+                    is_active=True
+                )
+                logger.info(f"Created default branch stock for {instance.name} at {branch.name}")
 
 
 @receiver(post_save, sender=MenuItem)
 def create_branch_stock_for_menu_item(sender, instance, created, **kwargs):
-    """Automatically create BranchStock entries when a menu item is created."""
-    if created:
-        logger.info(f"Creating branch stock for new menu item: {instance.name} (ID: {instance.id})")
-        
-        # Get the branch from the menu
-        branch = instance.menu.branch
-        
-        # Create a product for the menu item if it doesn't exist
-        from .models import UnitOfMeasure
-        product, product_created = Product.objects.get_or_create(
-            name=instance.name,
-            defaults={
-                'SKU': f'MI-{instance.id}',
-                'description': instance.description,
-                'product_type': 'finished_product',
-                'category': instance.category,
-                'unit_of_measure': UnitOfMeasure.objects.filter(code='pcs').first(),
-                'cost_price': instance.cost_price,
-                'selling_price': instance.selling_price,
-                'is_available_for_sale': True,
-                'is_available_for_recipes': False,
-                'is_active': True
-            }
-        )
-        
-        if product_created:
-            logger.info(f"Created product for menu item: {product.name} (SKU: {product.SKU})")
-        
-        # Create BranchStock for the menu item's product
-        branch_stock, created = BranchStock.objects.get_or_create(
-            product=product,
-            branch=branch,
-            defaults={
-                'current_stock': 0,
-                'reorder_level': 0,
-                'cost_price': instance.cost_price,
-                'selling_price': instance.selling_price,
-                'is_active': True
-            }
-        )
-        
-        if created:
-            logger.info(f"Created branch stock for menu item {instance.name} at {branch.name}: {branch_stock.current_stock} units")
-        else:
-            logger.debug(f"Branch stock already exists for menu item {instance.name} at {branch.name}")
+    """
+    Signal handler for MenuItem post_save.
+    Menu items no longer create their own products or branch stock entries.
+    They only reference existing products through recipe ingredients.
+    """
+    logger.info(f"Processing menu item: {instance.name} (ID: {instance.id}), created: {created}")
+    
+    # If there's an associated product (from a previous version), we'll clean it up
+    if instance.product:
+        logger.info(f"Menu item {instance.name} has an associated product (ID: {instance.product.id}). "
+                   f"This is no longer needed and can be removed.")
+        # We don't delete the product here to avoid data loss
+        # You might want to run a data migration to clean this up
+    
+    # No need to create products or branch stock for menu items anymore
+    logger.info("Skipping product and branch stock creation for menu item")
+    return
 
 
 @receiver(post_save, sender=PurchaseOrder)
@@ -109,8 +102,8 @@ def create_inventory_transaction_for_purchase(sender, instance, created, **kwarg
                         product=item.product,
                         branch=instance.receiving_branch,
                         defaults={
-                            'current_stock': 0,
-                            'reorder_level': 0,
+                            'current_stock': 1,
+                            'reorder_level': 1,
                             'is_active': True
                         }
                     )
@@ -164,8 +157,8 @@ def create_inventory_transaction_for_adjustment(sender, instance, created, **kwa
                     product=instance.product,
                     branch=instance.branch,
                     defaults={
-                        'current_stock': 0,
-                        'reorder_level': 0,
+                        'current_stock': 1,
+                        'reorder_level': 1,
                         'is_active': True
                     }
                 )
@@ -213,7 +206,7 @@ def create_inventory_transaction_for_transfer(sender, instance, created, **kwarg
                 source_stock, created = BranchStock.objects.get_or_create(
                     product=instance.product,
                     branch=instance.source_branch,
-                    defaults={'current_stock': 0, 'reorder_level': 0}
+                    defaults={'current_stock': 1, 'reorder_level': 1}
                 )
                 
                 old_source_stock = source_stock.current_stock
@@ -241,7 +234,7 @@ def create_inventory_transaction_for_transfer(sender, instance, created, **kwarg
                 target_stock, created = BranchStock.objects.get_or_create(
                     product=instance.product,
                     branch=instance.target_branch,
-                    defaults={'current_stock': 0, 'reorder_level': 0}
+                    defaults={'current_stock': 1, 'reorder_level': 1}
                 )
                 
                 old_target_stock = target_stock.current_stock
