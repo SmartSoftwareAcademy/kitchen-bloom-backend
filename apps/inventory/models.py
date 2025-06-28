@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -71,6 +73,7 @@ class Menu(TimestampedModel, SoftDeleteModel):
         if self.is_default:
             Menu.objects.filter(branch=self.branch, is_default=True).exclude(pk=self.pk).update(is_default=False)
         super().save(*args, **kwargs)
+
 
 class MenuItem(TimestampedModel, SoftDeleteModel):
     """Menu item model for finished products/dishes."""
@@ -519,51 +522,105 @@ class ProductVariant(BarcodeMixin, BaseNameDescriptionModel, TimestampedModel, S
             models.Index(fields=['barcode'],name='productvariant_barcode_idx'),
             models.Index(fields=['is_active'],name='productvariant_active_idx'),
         ]
-    
-    def __str__(self):
-        return f"{self.name} ({self.sku})"
 
 class BranchStock(TimestampedModel, SoftDeleteModel):
+    """Tracks stock levels per branch for both products and menu items.
+    This allows each branch to have different stock levels and pricing for the same product/menu item.
     """
-    Tracks product stock levels per branch.
-    This allows each branch to have different stock levels and pricing for the same product.
-    """
-    product = models.ForeignKey(Product,on_delete=models.CASCADE,related_name='branch_stock',verbose_name=_('product'))
-    branch = models.ForeignKey(BranchModel,on_delete=models.CASCADE,related_name='stock_items',verbose_name=_('branch'))
-    current_stock = models.DecimalField(_('current stock'),max_digits=10,decimal_places=3,default=0,validators=[MinValueValidator(0)])
-    reorder_level = models.DecimalField(_('reorder level'),max_digits=10,decimal_places=3,default=0,validators=[MinValueValidator(0)])
-    cost_price = models.DecimalField(_('cost price'),max_digits=10,decimal_places=2,null=True,blank=True,validators=[MinValueValidator(0)],help_text=_('Leave blank to use product default'))
-    selling_price = models.DecimalField(_('selling price'),max_digits=10,decimal_places=2,null=True,blank=True,validators=[MinValueValidator(0)],help_text=_('Leave blank to use product default'))
+    # Content type fields for generic relation
+    content_type = models.ForeignKey(
+        'contenttypes.ContentType',
+        on_delete=models.CASCADE,
+        limit_choices_to={'model__in': ('product', 'menuitem')}
+    )
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    
+    # Explicit references for easier querying (optional but recommended)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='branch_stock',
+        verbose_name=_('product'),
+        null=True,
+        blank=True
+    )
+    menu_item = models.ForeignKey(
+        'MenuItem',
+        on_delete=models.CASCADE,
+        related_name='branch_stock',
+        verbose_name=_('menu item'),
+        null=True,
+        blank=True
+    )
+    
+    branch = models.ForeignKey(BranchModel, on_delete=models.CASCADE, related_name='stock_items', verbose_name=_('branch'))
+    current_stock = models.DecimalField(_('current stock'), max_digits=10, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    reorder_level = models.DecimalField(_('reorder level'), max_digits=10, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    cost_price = models.DecimalField(_('cost price'), max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)], help_text=_('Leave blank to use product default'))
+    selling_price = models.DecimalField(_('selling price'), max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)], help_text=_('Leave blank to use product/default price'))
     last_restocked = models.DateTimeField(_('last restocked'), null=True, blank=True)
     is_active = models.BooleanField(_('is active'), default=True)
-    
+
     class Meta:
         verbose_name = _('branch stock')
-        verbose_name_plural = _('branch stock levels')
-        unique_together = (('product', 'branch'),)
-        ordering = ('product__name', 'branch__name')
-    
+        verbose_name_plural = _('branch stock')
+        unique_together = (('content_type', 'object_id', 'branch'),)
+        ordering = ('-content_type__model', 'branch__name')
+
     def __str__(self):
-        return f"{self.product.name} at {self.branch.name}"
-    
+        owner_name = self.content_object.name if self.content_object else 'Unknown'
+        return f"{owner_name} - {self.branch.name}: {self.current_stock}"
+
     def clean(self):
-        # Removed company validation since Supplier model doesn't have a company field
-        # If company validation is needed in the future, add a company field to the Supplier model
-        # and uncomment the following code:
-        # if hasattr(self, 'branch') and hasattr(self, 'product') and hasattr(self.product, 'supplier') and self.product.supplier:
-        #     if self.branch.company != self.product.supplier.company:
-        #         raise ValidationError({
-        #             'branch': _('Branch and supplier must belong to the same company')
-        #         })
-        pass
-    
-    def save(self, *args, **kwargs):
-        # Set default prices from product if not set
-        if self.cost_price is None:
-            self.cost_price = self.product.cost_price
-        if self.selling_price is None:
-            self.selling_price = self.product.selling_price
+        super().clean()
         
+        # Ensure either product or menu_item is set, but not both
+        if not (bool(self.product) ^ bool(self.menu_item)):
+            raise ValidationError({
+                'product': _('Either product or menu item must be set, but not both.')
+            })
+        
+        # Set content_type and object_id based on which field is set
+        if self.product:
+            self.content_type = ContentType.objects.get_for_model(Product)
+            self.object_id = self.product.id
+        elif self.menu_item:
+            self.content_type = ContentType.objects.get_for_model(MenuItem)
+            self.object_id = self.menu_item.id
+        
+        # Validate that the owner and branch belong to the same company
+        owner = self.product or self.menu_item
+        if hasattr(owner, 'company') and hasattr(self.branch, 'company'):
+            if owner.company != self.branch.company:
+                raise ValidationError({
+                    'branch': _('Owner and branch must belong to the same company.')
+                })
+        
+        # Ensure cost and selling prices are positive
+        if self.cost_price is not None and self.cost_price < 0:
+            raise ValidationError({
+                'cost_price': _('Cost price cannot be negative.')
+            })
+            
+        if self.selling_price is not None and self.selling_price < 0:
+            raise ValidationError({
+                'selling_price': _('Selling price cannot be negative.')
+            })
+            
+        # Set default cost price from product if not set
+        if self.product and self.cost_price is None:
+            self.cost_price = self.product.cost_price
+            
+        # Set default selling price from product/menu item if not set
+        if self.selling_price is None:
+            if self.product:
+                self.selling_price = self.product.selling_price
+            elif self.menu_item:
+                self.selling_price = self.menu_item.selling_price
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
         super().save(*args, **kwargs)
 
 class Batch(TimestampedModel, SoftDeleteModel):
@@ -735,7 +792,6 @@ class Modifier(TimestampedModel, SoftDeleteModel):
     def __str__(self):
         return f"{self.name} - {self.branch.name}"
 
-
 class ModifierOption(TimestampedModel, SoftDeleteModel):
     """Individual options within a modifier."""
     modifier = models.ForeignKey(Modifier, on_delete=models.CASCADE, related_name='options', verbose_name=_('modifier'))
@@ -754,7 +810,6 @@ class ModifierOption(TimestampedModel, SoftDeleteModel):
 
     def __str__(self):
         return f"{self.name} ({self.modifier.name})"
-
 
 class MenuItemModifier(TimestampedModel, SoftDeleteModel):
     """Links menu items to modifiers."""
@@ -846,7 +901,6 @@ class StockTransfer(models.Model):
     def save(self, *args, **kwargs):
         """Save stock transfer."""
         super().save(*args, **kwargs)
-
 
 # Django Signals for automatic stock management
 @receiver(post_save, sender=Product)

@@ -1,13 +1,22 @@
-from django.db.models.signals import post_save
+import logging
+import json
+from django.db.models.signals import post_save, pre_save, m2m_changed
 from django.dispatch import receiver
+from django.db.models import F, Sum, Q
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction
-import logging
-from .models import Product, MenuItem, BranchStock, InventoryTransaction, PurchaseOrder, InventoryAdjustment, StockTransfer
 
-# Set up logger
+from .models import (
+    Product, ProductVariant, BranchStock, PurchaseOrder, PurchaseOrderItem,
+    InventoryTransaction, InventoryAdjustment, StockTransfer, StockTransferItem,
+    MenuItem, Recipe, RecipeIngredient, Branch, Menu, MenuCategory, ProductCategory,
+    Supplier, UnitOfMeasure, ProductImage, ProductVariantImage, ProductVariantAttribute,
+    ProductVariantAttributeValue, ProductVariantCombination, ProductVariantPrice,
+    ProductVariantStock
+)
+
 logger = logging.getLogger(__name__)
-
 
 @receiver(post_save, sender=Product)
 def create_branch_stock_for_product(sender, instance, created, **kwargs):
@@ -16,9 +25,6 @@ def create_branch_stock_for_product(sender, instance, created, **kwargs):
     If initial_stock is provided in the raw_post_data, use those values.
     """
     if created:
-        from django.db import transaction
-        from apps.branches.models import Branch
-        
         logger.info(f"Creating branch stock for new product: {instance.name} (ID: {instance.id})")
         
         # Get initial stock data if it exists
@@ -64,21 +70,65 @@ def create_branch_stock_for_product(sender, instance, created, **kwargs):
 def create_branch_stock_for_menu_item(sender, instance, created, **kwargs):
     """
     Signal handler for MenuItem post_save.
-    Menu items no longer create their own products or branch stock entries.
-    They only reference existing products through recipe ingredients.
+    Creates or updates branch stock entries for the menu item.
+    Each menu item can have its own stock levels per branch.
     """
+    from .models import BranchStock, Branch
+    from django.db import transaction
+    
     logger.info(f"Processing menu item: {instance.name} (ID: {instance.id}), created: {created}")
     
-    # If there's an associated product (from a previous version), we'll clean it up
-    if instance.product:
-        logger.info(f"Menu item {instance.name} has an associated product (ID: {instance.product.id}). "
-                   f"This is no longer needed and can be removed.")
-        # We don't delete the product here to avoid data loss
-        # You might want to run a data migration to clean this up
+    # Skip if this is a raw save or if the menu item is being deleted
+    if kwargs.get('raw', False) or kwargs.get('update_fields') == ('deleted',):
+        return
     
-    # No need to create products or branch stock for menu items anymore
-    logger.info("Skipping product and branch stock creation for menu item")
-    return
+    # Get all active branches
+    branches = Branch.objects.filter(is_active=True)
+    logger.info(f"Found {branches.count()} active branches for menu item: {instance.name}")
+    
+    with transaction.atomic():
+        for branch in branches:
+            # Use get_or_create to handle race conditions
+            branch_stock, created = BranchStock.objects.get_or_create(
+                menu_item=instance,
+                branch=branch,
+                defaults={
+                    'current_stock': 0,  # Default to 0 stock for new menu items
+                    'reorder_level': 0,  # Default reorder level
+                    'selling_price': instance.selling_price,  # Default to menu item's selling price
+                    'is_active': True
+                }
+            )
+            
+            if created:
+                logger.info(f"Created branch stock for menu item {instance.name} at {branch.name}")
+            else:
+                # Update existing branch stock if needed
+                update_fields = {}
+                
+                # Update selling price if it's different from the menu item's price
+                if branch_stock.selling_price != instance.selling_price:
+                    branch_stock.selling_price = instance.selling_price
+                    update_fields['selling_price'] = instance.selling_price
+                
+                # Update is_active if needed
+                if not branch_stock.is_active:
+                    branch_stock.is_active = True
+                    update_fields['is_active'] = True
+                
+                if update_fields:
+                    branch_stock.save(update_fields=update_fields)
+                    logger.info(f"Updated branch stock for menu item {instance.name} at {branch.name}")
+    
+    # If this menu item has a recipe, update the cost price based on ingredients
+    if hasattr(instance, 'recipe') and instance.recipe:
+        try:
+            instance.update_cost_price()
+            logger.info(f"Updated cost price for menu item {instance.name} to {instance.cost_price}")
+        except Exception as e:
+            logger.error(f"Error updating cost price for menu item {instance.name}: {str(e)}")
+    
+    logger.info(f"Finished processing menu item: {instance.name}")
 
 
 @receiver(post_save, sender=PurchaseOrder)
