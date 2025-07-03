@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import os
 from django.core.files import File
 from django.conf import settings
@@ -720,18 +720,22 @@ class Command(BaseCommand):
                     self.stdout.write(f'  - Created recipe with {len(item_data["ingredients"])} ingredients')
 
     def create_branch_stock(self, branch, products):
-        """Create branch stock for all products."""
+        """Create branch stock for all products with proper decimal handling."""
         for product in products:
-            # Calculate initial stock based on product type
+            # Calculate initial stock based on product type with proper decimal precision
             if product.product_type == 'ingredient':
-                initial_stock = Decimal('10.0')  # 10 units for ingredients
-                reorder_level = Decimal('2.0')
+                initial_stock = Decimal('10.0').quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                reorder_level = Decimal('2.0').quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
             elif product.product_type == 'beverage':
-                initial_stock = Decimal('50.0')  # 50 units for beverages
-                reorder_level = Decimal('10.0')
+                initial_stock = Decimal('50.0').quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                reorder_level = Decimal('10.0').quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
             else:
-                initial_stock = Decimal('20.0')  # 20 units for finished products
-                reorder_level = Decimal('5.0')
+                initial_stock = Decimal('20.0').quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                reorder_level = Decimal('5.0').quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+            
+            # Ensure prices are properly quantized to 2 decimal places
+            cost_price = Decimal(str(product.cost_price)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if product.cost_price is not None else None
+            selling_price = Decimal(str(product.selling_price)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if product.selling_price is not None else None
             
             branch_stock, created = BranchStock.objects.get_or_create(
                 product=product,
@@ -739,11 +743,14 @@ class Command(BaseCommand):
                 defaults={
                     'current_stock': initial_stock,
                     'reorder_level': reorder_level,
-                    'cost_price': product.cost_price,
-                    'selling_price': product.selling_price,
+                    'cost_price': cost_price,
+                    'selling_price': selling_price,
                     'is_active': True
                 }
             )
             
             if created:
-                self.stdout.write(f'  - Created stock for {product.name}: {initial_stock} units') 
+                self.stdout.write(
+                    f'  - Created stock for {product.name}: {initial_stock} units, '
+                    f'Cost: {cost_price}, Selling: {selling_price}'
+                ) 

@@ -19,7 +19,7 @@ from .serializers import (
     ProductImageSerializer, MenuSerializer, MenuItemSerializer, MenuItemCreateSerializer,
     RecipeSerializer, RecipeIngredientSerializer, AllergySerializer,
     ModifierSerializer, ModifierOptionSerializer, MenuItemModifierSerializer,
-    StockCountSerializer, PurchaseOrderSerializer, StockTransferSerializer
+    StockCountSerializer, PurchaseOrderSerializer, StockTransferSerializer, InventoryItemCreateSerializer
 )
 from apps.base.utils import get_request_branch_id
 
@@ -1056,3 +1056,13 @@ class ProductImageViewSet(viewsets.ModelViewSet):
             ).exclude(pk=serializer.instance.pk).update(is_default=False)
         
         serializer.save()
+
+
+class InventoryItemCreateAPIView(APIView):
+    """API endpoint for creating either a Product or MenuItem from a unified form."""
+    def post(self, request, *args, **kwargs):
+        serializer = InventoryItemCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            result = serializer.save()
+            return Response(result, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

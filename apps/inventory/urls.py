@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter, SimpleRouter
 from . import views
-from .views import CatalogView, StockCountViewSet
+from .views import CatalogView, StockCountViewSet, InventoryItemCreateAPIView
 
 # Create a router for our viewsets
 router = DefaultRouter()
@@ -111,4 +111,5 @@ urlpatterns = [
     path('batch-stock/expired/',
          views.BatchStockViewSet.as_view({'get': 'expired'}),
          name='batch-stock-expired'),
+    path('items/create/', InventoryItemCreateAPIView.as_view(), name='inventory-item-create'),
 ]

@@ -734,3 +734,42 @@ class StockTransferSerializer(serializers.ModelSerializer):
         model = StockTransfer
         fields = ['id', 'source_branch', 'source_branch_name', 'target_branch', 'target_branch_name', 'product', 'product_name', 'quantity', 'status', 'notes', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ('created_by', 'created_at', 'updated_at')
+
+class InventoryItemCreateSerializer(serializers.Serializer):
+    TYPE_CHOICES = (
+        ('product', 'Product'),
+        ('menu_item', 'Menu Item'),
+    )
+    type = serializers.ChoiceField(choices=TYPE_CHOICES)
+    product = ProductCreateSerializer(required=False)
+    menu_item = MenuItemCreateSerializer(required=False)
+
+    def validate(self, data):
+        item_type = data.get('type')
+        if item_type == 'product':
+            if not data.get('product'):
+                raise serializers.ValidationError({'product': 'Product data is required.'})
+        elif item_type == 'menu_item':
+            if not data.get('menu_item'):
+                raise serializers.ValidationError({'menu_item': 'Menu item data is required.'})
+        else:
+            raise serializers.ValidationError({'type': 'Invalid type.'})
+        return data
+
+    def create(self, validated_data):
+        item_type = validated_data['type']
+        request = self.context.get('request')
+        if item_type == 'product':
+            product_data = validated_data['product']
+            serializer = ProductCreateSerializer(data=product_data, context=self.context)
+            serializer.is_valid(raise_exception=True)
+            product = serializer.save()
+            return {'type': 'product', 'product': product}
+        elif item_type == 'menu_item':
+            menu_item_data = validated_data['menu_item']
+            serializer = MenuItemCreateSerializer(data=menu_item_data, context=self.context)
+            serializer.is_valid(raise_exception=True)
+            menu_item = serializer.save()
+            return {'type': 'menu_item', 'menu_item': menu_item}
+        else:
+            raise serializers.ValidationError({'type': 'Invalid type.'})

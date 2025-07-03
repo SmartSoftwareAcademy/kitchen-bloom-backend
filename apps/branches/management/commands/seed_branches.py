@@ -20,11 +20,11 @@ class Command(BaseCommand):
         admin_user = User.objects.filter(is_superuser=True).first()
         if not admin_user:
             admin_user = User.objects.get_or_create(
-                email='admin@example.com',
+                email='titusowuor30@gmail.com',
                 defaults={
-                "password":'admin123',
-                'first_name':'Admin',
-                'last_name':'User'
+                "password":'@User123',
+                'first_name':'super',
+                'last_name':'user'
                 }
             )
             self.stdout.write(self.style.SUCCESS('Created admin user'))
@@ -34,15 +34,15 @@ class Command(BaseCommand):
         # Sample companies
         companies = [
             {
-                'name': 'Kitchen Bloom',
-                'legal_name': 'Kitchen Bloom Limited',
+                'name': 'Nevada Pub & restaurant',
+                'legal_name': 'Nevada Pub & restaurant Limited',
                 'tax_id': 'P05123456789',
                 'registration_number': 'CPT-123456',
-                'primary_contact_email': 'info@kitchenbloom.com',
-                'primary_contact_phone': '+254712345678',
+                'primary_contact_email': 'info@nevadapub.co.ke',
+                'primary_contact_phone': '+254794175357',
                 'address': '123 Garden Road',
-                'city': 'Nairobi',
-                'state': 'Nairobi',
+                'city': 'Mombasa',
+                'state': 'Mombasa',
                 'postal_code': '00100',
                 'country': 'Kenya',
                 'branches': [
@@ -50,8 +50,8 @@ class Command(BaseCommand):
                         'name': 'Main Branch',
                         'code': 'MB001',
                         'address': '123 Garden Road',
-                        'city': 'Nairobi',
-                        'phone': '+254712345678',
+                        'city': 'Mombasa',
+                        'phone': '+254794175357',
                         'is_default': True
                     }
                 ]
@@ -102,6 +102,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\nAdmin login:\n'
             f'Username: {admin_user}\n'
-            f'Password: admin123\n\n'
+            f'Password: @User123\n\n'
             'Please change the password after first login.'
         ))
