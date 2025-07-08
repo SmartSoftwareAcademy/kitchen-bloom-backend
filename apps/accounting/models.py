@@ -386,6 +386,7 @@ class Expense(TimestampedModel, SoftDeleteModel):
     # Relationships
     branch = models.ForeignKey('branches.Branch', on_delete=models.PROTECT, related_name='expenses', verbose_name=_('branch'), help_text=_('Branch where expense was incurred'))
     employee = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name='expenses', verbose_name=_('employee'), help_text=_('Employee associated with this expense (if applicable)'))
+    purchase_order = models.ForeignKey('inventory.PurchaseOrder', on_delete=models.SET_NULL, null=True, blank=True, related_name='accounting_expenses', help_text=_('Related purchase order, if this expense is for a purchase order'))
     # Attachments
     receipt = models.FileField(_('receipt'), upload_to='expenses/receipts/%Y/%m/%d/', null=True, blank=True, help_text=_('Expense receipt or proof of payment'))
     # Additional information

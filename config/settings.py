@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import timedelta
 import sys
 import logging
-from .jazzmin import JAZZMIN_SETTINGS
+from .jazzmin import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS
 from corsheaders.defaults import default_headers
 import dj_database_url
 from urllib.parse import urlparse
@@ -236,28 +236,30 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:NwdbkRvsAHXMbHBjHKZzXFfRRIdaBuaW@caboose.proxy.rlwy.net:55746/railway')
-#logger.info(f"Using DATABASE_URL: {db_url}")
-# settings.py
-DATABASES = {
-    'default': dj_database_url.config(
-        default=db_url,
-        conn_max_age=600,
-        conn_health_checks=True,  # Enable connection health checks
-        ssl_require=True
-    )
-}
-# Fall back to individual settings
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.getenv('POSTGRES_DB', 'kitchen_bloom'),
-#         'USER': os.getenv('POSTGRES_USER', 'postgres'),
-#         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
-#         'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-#         'PORT': os.getenv('POSTGRES_PORT', '5432'),
-#     }
-# }
+if not DEBUG:
+    db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:NwdbkRvsAHXMbHBjHKZzXFfRRIdaBuaW@caboose.proxy.rlwy.net:55746/railway')
+    #logger.info(f"Using DATABASE_URL: {db_url}")
+    # settings.py
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=db_url,
+            conn_max_age=600,
+            conn_health_checks=True,  # Enable connection health checks
+            ssl_require=True
+        )
+    }
+else:
+    # Fall back to individual settings
+     DATABASES = {
+         'default': {
+             'ENGINE': 'django.db.backends.postgresql',
+             'NAME': os.getenv('POSTGRES_DB', 'kitchen_bloom'),
+             'USER': os.getenv('POSTGRES_USER', 'postgres'),
+             'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+             'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        }
+    }
   
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -453,6 +455,7 @@ EMAIL_BACKEND = os.environ.get(
 )
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'codevertexitsolutions@gmail.com')
 JAZZMIN_SETTINGS=JAZZMIN_SETTINGS
+JAZZMIN_UI_TWEAKS=JAZZMIN_UI_TWEAKS
 
 # REST Framework settings
 REST_FRAMEWORK = {

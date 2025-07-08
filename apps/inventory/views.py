@@ -1,3 +1,4 @@
+from datetime import timedelta
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -19,7 +20,8 @@ from .serializers import (
     ProductImageSerializer, MenuSerializer, MenuItemSerializer, MenuItemCreateSerializer,
     RecipeSerializer, RecipeIngredientSerializer, AllergySerializer,
     ModifierSerializer, ModifierOptionSerializer, MenuItemModifierSerializer,
-    StockCountSerializer, PurchaseOrderSerializer, StockTransferSerializer, InventoryItemCreateSerializer
+    StockCountSerializer, PurchaseOrderSerializer, StockTransferSerializer, InventoryItemCreateSerializer,
+    MinimalCatalogProductSerializer, MinimalCatalogMenuItemSerializer
 )
 from apps.base.utils import get_request_branch_id
 
@@ -32,7 +34,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'parent']
+    filterset_fields = ['is_active', 'parent', 'is_menu_category', 'is_ingredient_category']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'created_at']
 
@@ -876,48 +878,81 @@ class CatalogView(APIView):
     permission_classes=[permissions.IsAuthenticated]
     
     def get(self, request):
-        """Get catalog of products for a specific branch."""
+        """Get catalog of products and menu items for a specific branch, grouped by category, with pagination and filtering."""
         branch_id = get_request_branch_id(request)
         if not branch_id:
             return Response(
                 {'detail': 'Branch ID is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Get products with stock levels for this branch
-        products = Product.objects.filter(
+        # Query params
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 6))
+        category_filter = request.query_params.get('category')
+        is_available = request.query_params.get('is_available')
+        search = request.query_params.get('search')
+
+        # --- PRODUCTS ---
+        products_qs = Product.objects.filter(
             branch_stock__branch_id=branch_id,
             branch_stock__is_active=True,
             is_active=True
         ).select_related('category', 'unit_of_measure').prefetch_related('images')
-        
-        # Group by category
-        catalog = {}
-        for product in products:
-            category_name = product.category.name if product.category else 'Uncategorized'
-            if category_name not in catalog:
-                catalog[category_name] = []
-            
-            # Get stock info for this branch
-            branch_stock = product.get_stock_for_branch(branch_id)
-            stock_info = {
-                'current_stock': branch_stock.current_stock if branch_stock else 0,
-                'reorder_level': branch_stock.reorder_level if branch_stock else 0,
-                'cost_price': branch_stock.cost_price if branch_stock else product.cost_price,
-                'selling_price': branch_stock.selling_price if branch_stock else product.selling_price,
-            }
-            
-            catalog[category_name].append({
-                'id': product.id,
-                'name': product.name,
-                'description': product.description,
-                'SKU': product.SKU,
-                'unit_of_measure': product.unit_of_measure.symbol if product.unit_of_measure else '',
-                'image_url': product.get_image_url(),
-                'stock_info': stock_info,
-            })
-        
-        return Response(catalog)
+        # Filtering
+        if category_filter:
+            products_qs = products_qs.filter(category__name=category_filter)
+        if is_available is not None:
+            if is_available.lower() == 'true':
+                products_qs = products_qs.filter(is_available_for_sale=True)
+            elif is_available.lower() == 'false':
+                products_qs = products_qs.filter(is_available_for_sale=False)
+        if search:
+            products_qs = products_qs.filter(
+                Q(name__icontains=search) | Q(description__icontains=search)
+            )
+        # --- MENU ITEMS ---
+        menu_items_qs = MenuItem.objects.filter(
+            menu__branch_id=branch_id,
+            is_available=True
+        ).select_related('category', 'menu', 'created_by')
+        if category_filter:
+            menu_items_qs = menu_items_qs.filter(category__name=category_filter)
+        if is_available is not None:
+            if is_available.lower() == 'true':
+                menu_items_qs = menu_items_qs.filter(is_available=True)
+            elif is_available.lower() == 'false':
+                menu_items_qs = menu_items_qs.filter(is_available=False)
+        if search:
+            menu_items_qs = menu_items_qs.filter(
+                Q(name__icontains=search) | Q(description__icontains=search)
+            )
+        # Serialize
+        products_data = MinimalCatalogProductSerializer(products_qs, many=True, context={'request': request}).data
+        menu_items_data = MinimalCatalogMenuItemSerializer(menu_items_qs, many=True, context={'request': request}).data
+        # Combine and group by category
+        all_items = products_data + menu_items_data
+        # Group by category_name
+        grouped = {}
+        for item in all_items:
+            cat = item.get('category_name') or 'Uncategorized'
+            grouped.setdefault(cat, []).append(item)
+        # Pagination (flatten, then slice, then regroup)
+        flat_items = [item for sublist in grouped.values() for item in sublist]
+        total_count = len(flat_items)
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_items = flat_items[start:end]
+        # Regroup paginated items
+        paginated_grouped = {}
+        for item in paginated_items:
+            cat = item.get('category_name') or 'Uncategorized'
+            paginated_grouped.setdefault(cat, []).append(item)
+        return Response({
+            'results': paginated_grouped,
+            'count': total_count,
+            'page': page,
+            'page_size': page_size
+        })
 
 
 class ModifierViewSet(viewsets.ModelViewSet):

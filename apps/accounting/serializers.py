@@ -108,7 +108,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     """Serializer for expenses."""
     class Meta:
         model = Expense
-        fields = ['id','expense_number','amount','currency','expense_date','status','category','branch','employee','notes','created_at','updated_at',]
+        fields = ['id','expense_number','amount','currency','expense_date','status','category','branch','employee','notes','created_at','updated_at','purchase_order']
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def validate(self, attrs):

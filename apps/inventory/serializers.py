@@ -10,6 +10,7 @@ from .models import (
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from apps.base.utils import get_request_branch_id
+from apps.accounting.serializers import ExpenseSerializer
 
 User = get_user_model()
 
@@ -155,7 +156,10 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         product = Product(**validated_data)
         if initial_stock_data:
             product._initial_stock_data = initial_stock_data
-        
+        # Attach user for initial stock transaction
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            product._created_by = request.user
         # Save the product (this will trigger the post_save signal)
         product.save()
         
@@ -556,6 +560,12 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
         default='medium'
     )
     servings = serializers.IntegerField(write_only=True, required=False, min_value=1, default=1)
+    initial_stock = serializers.DictField(
+        child=serializers.DictField(child=serializers.DecimalField(max_digits=10, decimal_places=3)),
+        required=False,
+        write_only=True,
+        help_text="Initial stock levels by branch ID. Format: {'branch_id': {'current_stock': 10, 'reorder_level': 5}}"
+    )
     
     class Meta:
         model = MenuItem
@@ -563,23 +573,52 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
             'id', 'menu', 'name', 'description', 'category', 'selling_price',
             'cost_price', 'preparation_time', 'is_available', 'is_featured',
             'display_order', 'allergens', 'nutritional_info', 'images', 'default_image_index',
-            'recipe_ingredients', 'recipe_instructions', 'cooking_time', 'difficulty_level', 'servings'
+            'recipe_ingredients', 'recipe_instructions', 'cooking_time', 'difficulty_level', 'servings',
+            'initial_stock'
         ]
         read_only_fields = ('created_at', 'updated_at')
         
-    def validate_recipe_ingredients(self, value):
-        """Validate that recipe ingredients have required fields."""
-        if not value:
-            return value
-            
-        for ingredient in value:
-            if 'ingredient' not in ingredient:
-                raise serializers.ValidationError("Each ingredient must have an 'ingredient' field.")
-            if 'quantity' not in ingredient or float(ingredient['quantity']) <= 0:
-                raise serializers.ValidationError("Each ingredient must have a positive 'quantity'.")
-            if 'unit_of_measure' not in ingredient:
-                raise serializers.ValidationError("Each ingredient must have a 'unit_of_measure'.")
-        return value
+    def validate(self, data):
+        # Enforce recipe_ingredients is required and not empty
+        recipe_ingredients = data.get('recipe_ingredients')
+        if not recipe_ingredients or len(recipe_ingredients) == 0:
+            raise serializers.ValidationError({
+                'recipe_ingredients': 'You must provide at least one ingredient for the menu item recipe.'
+            })
+        # Validate initial_stock data if provided
+        if 'initial_stock' in data:
+            from apps.branches.models import Branch
+            initial_stock = data['initial_stock']
+            if not isinstance(initial_stock, dict):
+                raise serializers.ValidationError({
+                    'initial_stock': 'Must be a dictionary mapping branch IDs to stock data.'
+                })
+            for branch_id, stock_data in initial_stock.items():
+                try:
+                    branch_id_int = int(branch_id)
+                    if not Branch.objects.filter(id=branch_id_int, is_active=True).exists():
+                        raise serializers.ValidationError({
+                            'initial_stock': f'Branch with ID {branch_id} does not exist or is inactive.'
+                        })
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError({
+                        'initial_stock': f'Invalid branch ID: {branch_id}. Must be an integer.'
+                    })
+                if not isinstance(stock_data, dict):
+                    raise serializers.ValidationError({
+                        'initial_stock': f'Stock data for branch {branch_id} must be a dictionary.'
+                    })
+                for field in ['current_stock', 'reorder_level']:
+                    if field in stock_data:
+                        try:
+                            value = stock_data[field]
+                            if value is not None:
+                                float(value)
+                        except (ValueError, TypeError):
+                            raise serializers.ValidationError({
+                                'initial_stock': f'{field} must be a number for branch {branch_id}.'
+                            })
+        return data
     
     def create(self, validated_data):
         # Extract recipe data if provided
@@ -588,19 +627,15 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
         cooking_time = validated_data.pop('cooking_time', None)
         difficulty_level = validated_data.pop('difficulty_level', 'medium')
         servings = validated_data.pop('servings', 1)
-        
-        # Extract other data
         images_data = validated_data.pop('images', [])
         default_image_index = validated_data.pop('default_image_index', 0)
         allergens_data = validated_data.pop('allergens', [])
-        
+        initial_stock_data = validated_data.pop('initial_stock', {})
         # Create the menu item
         menu_item = MenuItem.objects.create(**validated_data)
-        
         # Set many-to-many relationships
         if allergens_data:
             menu_item.allergens.set(allergens_data)
-            
         # Create recipe if ingredients are provided
         if recipe_ingredients_data:
             recipe = Recipe.objects.create(
@@ -611,13 +646,17 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
                 servings=servings,
                 created_by=self.context['request'].user
             )
-            
-            # Create recipe ingredients
             for ingredient_data in recipe_ingredients_data:
                 RecipeIngredient.objects.create(recipe=recipe, **ingredient_data)
-            
-            # Update allergens from recipe ingredients
             menu_item.update_allergens_from_recipe()
+        # Attach initial stock data to the menu_item instance for the signal handler
+        if initial_stock_data:
+            menu_item._initial_stock_data = initial_stock_data
+        # Attach user for initial stock transaction
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            menu_item._created_by = request.user
+        menu_item.save()
         return menu_item
 
 class MenuSerializer(serializers.ModelSerializer):
@@ -703,9 +742,10 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     items = PurchaseOrderItemSerializer(many=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    expenses = ExpenseSerializer(many=True, read_only=True, source='accounting_expenses')
     class Meta:
         model = PurchaseOrder
-        fields = ['id', 'supplier', 'supplier_name', 'expected_delivery', 'status', 'notes', 'items', 'created_by', 'created_at', 'updated_at']
+        fields = ['id', 'supplier', 'supplier_name', 'expected_delivery', 'status', 'notes', 'items', 'created_by', 'created_at', 'updated_at', 'expenses']
         read_only_fields = ('created_by', 'created_at', 'updated_at')
 
     def create(self, validated_data):
@@ -773,3 +813,89 @@ class InventoryItemCreateSerializer(serializers.Serializer):
             return {'type': 'menu_item', 'menu_item': menu_item}
         else:
             raise serializers.ValidationError({'type': 'Invalid type.'})
+
+class MinimalCatalogProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    default_image = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
+    stock = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'description', 'category', 'category_name',
+            'selling_price', 'cost_price', 'type', 'default_image', 'stock'
+        ]
+
+    def get_type(self, obj):
+        return 'product'
+
+    def get_default_image(self, obj):
+        img = obj.get_default_image()
+        return img.image.url if img else None
+
+    def get_stock(self, obj):
+        request = self.context.get('request')
+        branch_id = None
+        if request:
+            branch_id = request.query_params.get('branch_id')
+        if branch_id is not None:
+            try:
+                branch_id_int = int(branch_id)
+            except (TypeError, ValueError):
+                branch_id_int = branch_id
+            stock_obj = None
+            # Try both int and str for branch_id
+            for bs in obj.branch_stock.all():
+                if getattr(bs, 'branch_id', None) == branch_id_int or str(getattr(bs, 'branch_id', '')) == str(branch_id):
+                    stock_obj = bs
+                    break
+            if not stock_obj:
+                # fallback to queryset if not prefetched
+                stock_obj = obj.branch_stock.filter(branch_id=branch_id).first()
+            if stock_obj:
+                return float(stock_obj.current_stock)
+        return None
+
+class MinimalCatalogMenuItemSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    default_image = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
+    track_inventory = serializers.BooleanField(read_only=True)
+    stock = serializers.SerializerMethodField()
+    is_available = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = MenuItem
+        fields = [
+            'id', 'name', 'description', 'category', 'category_name',
+            'selling_price', 'cost_price', 'type', 'default_image', 'track_inventory', 'stock', 'is_available'
+        ]
+
+    def get_type(self, obj):
+        return 'menu_item'
+
+    def get_default_image(self, obj):
+        # If you add images to MenuItem, update this logic
+        return None
+
+    def get_stock(self, obj):
+        request = self.context.get('request')
+        branch_id = None
+        if request:
+            branch_id = request.query_params.get('branch_id')
+        if branch_id is not None:
+            try:
+                branch_id_int = int(branch_id)
+            except (TypeError, ValueError):
+                branch_id_int = branch_id
+            stock_obj = None
+            for bs in obj.branch_stock.all():
+                if getattr(bs, 'branch_id', None) == branch_id_int or str(getattr(bs, 'branch_id', '')) == str(branch_id):
+                    stock_obj = bs
+                    break
+            if not stock_obj:
+                stock_obj = obj.branch_stock.filter(branch_id=branch_id).first()
+            if stock_obj:
+                return float(stock_obj.current_stock)
+        return None

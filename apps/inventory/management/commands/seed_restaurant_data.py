@@ -456,6 +456,9 @@ class Command(BaseCommand):
         ingredients = []
         for ing_data in ingredients_data:
             ing_data['barcode'] = generate_unique_barcode('ING')
+            # Patch: round prices to 2 decimal places
+            ing_data['cost_price'] = Decimal(str(ing_data['cost_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            ing_data['selling_price'] = Decimal(str(ing_data['selling_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             ingredient, created = Product.objects.get_or_create(
                 SKU=ing_data['SKU'],
                 defaults=ing_data
@@ -512,6 +515,9 @@ class Command(BaseCommand):
         beverages = []
         for bev_data in beverages_data:
             bev_data['barcode'] = generate_unique_barcode('BEV')
+            # Patch: round prices to 2 decimal places
+            bev_data['cost_price'] = Decimal(str(bev_data['cost_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            bev_data['selling_price'] = Decimal(str(bev_data['selling_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             beverage, created = Product.objects.get_or_create(
                 SKU=bev_data['SKU'],
                 defaults=bev_data
@@ -548,6 +554,9 @@ class Command(BaseCommand):
         finished_products = []
         for fin_data in finished_products_data:
             fin_data['barcode'] = generate_unique_barcode('FIN')
+            # Patch: round prices to 2 decimal places
+            fin_data['cost_price'] = Decimal(str(fin_data['cost_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            fin_data['selling_price'] = Decimal(str(fin_data['selling_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             finished_product, created = Product.objects.get_or_create(
                 SKU=fin_data['SKU'],
                 defaults=fin_data
@@ -661,6 +670,9 @@ class Command(BaseCommand):
                 )
             if not cost_price:
                 cost_price = Decimal(item_data['selling_price']) * Decimal('0.5')
+            # Patch: round prices to 2 decimal places
+            item_data['selling_price'] = Decimal(str(item_data['selling_price'])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            cost_price = Decimal(str(cost_price)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             # Remove allergens from defaults, handle after creation
             menu_item, created = MenuItem.objects.get_or_create(
                 menu=menu,

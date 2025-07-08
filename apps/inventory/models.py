@@ -846,19 +846,28 @@ class StockCount(TimestampedModel, SoftDeleteModel):
 
 class PurchaseOrder(models.Model):
     STATUS_CHOICES = [
+        ('draft', 'Draft'),
         ('pending', 'Pending'),
         ('ordered', 'Ordered'),
+        ('partially_received', 'Partially Received'),
         ('received', 'Received'),
+        ('closed', 'Closed'),
         ('cancelled', 'Cancelled'),
     ]
     supplier = models.ForeignKey('Supplier', on_delete=models.CASCADE, related_name='purchase_orders')
     receiving_branch = models.ForeignKey('branches.Branch', on_delete=models.CASCADE, related_name='receiving_purchase_orders', verbose_name='receiving branch')
+    order_date = models.DateField(null=True, blank=True)
     expected_delivery = models.DateField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    reference_number = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     notes = models.TextField(blank=True)
+    invoice_number = models.CharField(max_length=100, blank=True)
+    invoice_date = models.DateField(null=True, blank=True)
+    invoice_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_purchase_orders')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Attachments and expenses will be related models
 
     def __str__(self):
         return f"PO #{self.id} - {self.supplier.name}"
@@ -870,10 +879,26 @@ class PurchaseOrder(models.Model):
 class PurchaseOrderItem(models.Model):
     purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey('Product', on_delete=models.CASCADE)
+    description = models.CharField(max_length=255, blank=True)
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_of_measure = models.ForeignKey('UnitOfMeasure', on_delete=models.PROTECT, null=True, blank=True)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return f"{self.product.name} x {self.quantity} (PO #{self.purchase_order.id})"
+
+class PurchaseOrderAttachment(models.Model):
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='purchase_order_attachments/')
+    description = models.CharField(max_length=255, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Attachment for PO #{self.purchase_order.id}"
 
 class StockTransfer(models.Model):
     STATUS_CHOICES = [

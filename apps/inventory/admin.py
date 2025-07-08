@@ -60,6 +60,8 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'parent', 'is_active', 'is_menu_category', 'is_ingredient_category', 'display_order')
     search_fields = ('name', 'description')
     list_filter = ('is_active', 'is_menu_category', 'is_ingredient_category')
+    list_display_links = ('name',)
+    list_editable = ('is_active', 'is_menu_category', 'is_ingredient_category', 'display_order')
     ordering = ('display_order', 'name')
 
 
@@ -82,9 +84,22 @@ class MenuAdmin(admin.ModelAdmin):
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'menu', 'category', 'selling_price', 'cost_price', 'is_available', 'is_featured', 'display_order', 'get_allergens')
+    list_display = ('name', 'menu', 'category', 'selling_price', 'cost_price', 'is_available', 'is_featured', 'display_order', 'get_allergens', 'track_inventory')
     search_fields = ('name', 'description')
     list_filter = ('is_available', 'is_featured', 'menu', 'category')
+    fieldsets = (
+        (None, {
+            'fields': ('menu','name', 'description', 'category', 'selling_price', 'cost_price', 'is_available', 'is_featured', 'display_order')
+        }),
+        ('Inventory', {
+            'fields': ('track_inventory',)
+        }),
+        ('Allergens', {
+            'fields': ('allergens',)
+        }),
+    )
+    list_display_links = ('name',)
+    list_editable = ('is_available', 'is_featured', 'display_order', 'track_inventory')
     ordering = ('display_order', 'name')
     filter_horizontal = ('allergens',)
     def get_allergens(self, obj):
@@ -136,6 +151,9 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = ('SKU', 'name', 'product_type', 'category', 'supplier', 'unit_of_measure', 'cost_price', 'selling_price', 'is_active', 'get_allergens')
     search_fields = ('SKU', 'name', 'barcode', 'description')
     list_filter = ('product_type', 'category', 'supplier', 'unit_of_measure', 'is_active')
+    list_display_links = ('SKU', 'name')
+    list_editable = ('is_active',)
+    
     ordering = ('name',)
     filter_horizontal = ('allergens',)
     def get_allergens(self, obj):
