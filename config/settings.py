@@ -236,21 +236,23 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-if not DEBUG:
-    db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:NwdbkRvsAHXMbHBjHKZzXFfRRIdaBuaW@caboose.proxy.rlwy.net:55746/railway')
-    #logger.info(f"Using DATABASE_URL: {db_url}")
-    # settings.py
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=db_url,
-            conn_max_age=600,
-            conn_health_checks=True,  # Enable connection health checks
-            ssl_require=True
-        )
-    }
+#if not DEBUG:
+db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:NwdbkRvsAHXMbHBjHKZzXFfRRIdaBuaW@caboose.proxy.rlwy.net:55746/railway')
+#logger.info(f"Using DATABASE_URL: {db_url}")
+# settings.py
+##
+DATABASES = {
+    'default': dj_database_url.config(
+        default=db_url,
+        conn_max_age=600,
+        conn_health_checks=True,  # Enable connection health checks
+        ssl_require=True
+    )
+}
+"""
 else:
     # Fall back to individual settings
-     DATABASES = {
+    DATABASES = {
          'default': {
              'ENGINE': 'django.db.backends.postgresql',
              'NAME': os.getenv('POSTGRES_DB', 'kitchen_bloom'),
@@ -260,7 +262,7 @@ else:
             'PORT': os.getenv('POSTGRES_PORT', '5432'),
         }
     }
-  
+"""
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
