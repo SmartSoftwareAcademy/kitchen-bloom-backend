@@ -84,7 +84,7 @@ class MenuAdmin(admin.ModelAdmin):
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'menu', 'category', 'selling_price', 'cost_price', 'is_available', 'is_featured', 'display_order', 'get_allergens', 'track_inventory')
+    list_display = ('name', 'menu','image', 'category', 'selling_price', 'cost_price', 'is_available', 'is_featured', 'display_order', 'get_allergens', 'track_inventory')
     search_fields = ('name', 'description')
     list_filter = ('is_available', 'is_featured', 'menu', 'category')
     fieldsets = (
@@ -148,6 +148,7 @@ class ProductImageAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    inlines=[ProductImageInline]
     list_display = ('SKU', 'name', 'product_type', 'category', 'supplier', 'unit_of_measure', 'cost_price', 'selling_price', 'is_active', 'get_allergens')
     search_fields = ('SKU', 'name', 'barcode', 'description')
     list_filter = ('product_type', 'category', 'supplier', 'unit_of_measure', 'is_active')

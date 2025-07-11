@@ -27,16 +27,15 @@ JAZZMIN_SETTINGS = {
     
     # Links to put along the top menu
     "topmenu_links": [
-        # Url that gets reversed (Permissions can be added)
         {"name": "Dashboard", "url": "admin:index", "permissions": ["auth.view_user"]},
-        {"model": "auth.User"},
-        {"app": "branches"},
         {"app": "inventory"},
         {"app": "sales"},
         {"app": "tables"},
         {"app": "crm"},
         {"app": "employees"},
         {"app": "payroll"},
+        {"app": "reporting"},
+        # Add more apps or custom links as needed
     ],
 
     #############

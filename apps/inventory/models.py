@@ -100,6 +100,7 @@ class MenuItem(TimestampedModel, SoftDeleteModel):
     is_featured = models.BooleanField(_('is featured'), default=False)
     display_order = models.PositiveIntegerField(_('display order'), default=0)
     allergens = models.ManyToManyField('Allergy', blank=True, related_name='menu_items')
+    image=models.FileField(upload_to="menu/items/images/",blank=True,null=True)
     nutritional_info = models.JSONField(_('nutritional info'), default=dict, blank=True, help_text=_('Nutritional information'))
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_menu_items', verbose_name=_('created by'))
     track_inventory = models.BooleanField(_('track inventory'), default=False, help_text=_('Enable inventory tracking for this menu item'))
@@ -157,7 +158,6 @@ class MenuItem(TimestampedModel, SoftDeleteModel):
                 ingredient = recipe_ingredient.ingredient
                 allergen_set.update(ingredient.allergens.all())
             self.allergens.set(allergen_set)
-            self.save(update_fields=['allergens'])
 
 class Recipe(TimestampedModel, SoftDeleteModel):
     """Recipe model linking menu items to ingredients."""

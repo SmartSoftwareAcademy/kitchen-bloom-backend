@@ -15,7 +15,7 @@ from corsheaders.defaults import default_headers
 import dj_database_url
 from urllib.parse import urlparse
 import logging
-import django_redis
+#import django_redis
 from django.core.cache import cache
 logger = logging.getLogger(__name__)
 
@@ -240,7 +240,7 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:NwdbkRvsAHXMbHBjHKZzXFfRRIdaBuaW@caboose.proxy.rlwy.net:55746/railway')
 #logger.info(f"Using DATABASE_URL: {db_url}")
 # settings.py
-##
+#"""
 DATABASES = {
     'default': dj_database_url.config(
         default=db_url,
@@ -249,19 +249,20 @@ DATABASES = {
         ssl_require=True
     )
 }
+
 """
-else:
+#else:
     # Fall back to individual settings
-    DATABASES = {
-         'default': {
-             'ENGINE': 'django.db.backends.postgresql',
-             'NAME': os.getenv('POSTGRES_DB', 'kitchen_bloom'),
-             'USER': os.getenv('POSTGRES_USER', 'postgres'),
-             'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
-             'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-            'PORT': os.getenv('POSTGRES_PORT', '5432'),
-        }
+DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('POSTGRES_DB', 'kitchen_bloom'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
+}
 """
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

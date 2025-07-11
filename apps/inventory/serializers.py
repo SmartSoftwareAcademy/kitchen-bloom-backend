@@ -148,6 +148,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         return data
     
     def create(self, validated_data):
+        allergens_data = validated_data.pop('allergens', None)
         images_data = validated_data.pop('images', [])
         default_image_index = validated_data.pop('default_image_index', 0)
         initial_stock_data = validated_data.pop('initial_stock', {})
@@ -163,6 +164,9 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         # Save the product (this will trigger the post_save signal)
         product.save()
         
+        # Always set allergens if submitted (even if empty, to clear)
+        if allergens_data is not None or allergens_data != []:
+            product.allergens.set(allergens_data)
         # Create product images
         for index, image in enumerate(images_data):
             is_default = index == default_image_index
@@ -520,7 +524,7 @@ class MenuItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
         fields = [
-            'id', 'name', 'description', 'category', 'category_name', 'selling_price',
+            'id', 'name','image', 'description', 'category', 'category_name', 'selling_price',
             'cost_price', 'cost_price_calculated', 'preparation_time', 'is_available',
             'is_featured', 'display_order', 'allergens', 'nutritional_info',
             'recipe', 'ingredient_availability', 'created_at', 'updated_at'
@@ -540,12 +544,7 @@ class MenuItemSerializer(serializers.ModelSerializer):
 
 class MenuItemCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating menu items with images and recipes."""
-    images = serializers.ListField(
-        child=serializers.ImageField(),
-        required=False,
-        write_only=True
-    )
-    default_image_index = serializers.IntegerField(required=False, write_only=True)
+    allergens = serializers.PrimaryKeyRelatedField(queryset=Allergy.objects.all(), many=True, required=False)
     recipe_ingredients = RecipeIngredientCreateSerializer(many=True, required=False)
     recipe_instructions = serializers.CharField(write_only=True, required=False, allow_blank=True)
     cooking_time = serializers.DurationField(write_only=True, required=False, allow_null=True)
@@ -570,11 +569,10 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
         fields = [
-            'id', 'menu', 'name', 'description', 'category', 'selling_price',
+            'id', 'menu', 'name','image','description', 'category', 'selling_price',
             'cost_price', 'preparation_time', 'is_available', 'is_featured',
-            'display_order', 'allergens', 'nutritional_info', 'images', 'default_image_index',
-            'recipe_ingredients', 'recipe_instructions', 'cooking_time', 'difficulty_level', 'servings',
-            'initial_stock'
+            'display_order', 'allergens', 'nutritional_info','recipe_ingredients', 'recipe_instructions', 
+            'cooking_time', 'difficulty_level', 'servings','initial_stock'
         ]
         read_only_fields = ('created_at', 'updated_at')
         
@@ -621,21 +619,27 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
         return data
     
     def create(self, validated_data):
+        # Handle allergens (m2m) field properly
+        allergens_data = validated_data.pop('allergens', None)
+        # Defensive pop to ensure allergens is not in validated_data
+        validated_data.pop('allergens', None)
         # Extract recipe data if provided
         recipe_ingredients_data = validated_data.pop('recipe_ingredients', [])
         recipe_instructions = validated_data.pop('recipe_instructions', '')
         cooking_time = validated_data.pop('cooking_time', None)
         difficulty_level = validated_data.pop('difficulty_level', 'medium')
         servings = validated_data.pop('servings', 1)
-        images_data = validated_data.pop('images', [])
-        default_image_index = validated_data.pop('default_image_index', 0)
-        allergens_data = validated_data.pop('allergens', [])
+        image_data = validated_data.pop('image', None)
         initial_stock_data = validated_data.pop('initial_stock', {})
-        # Create the menu item
+        print(validated_data)
         menu_item = MenuItem.objects.create(**validated_data)
-        # Set many-to-many relationships
-        if allergens_data:
+
+        # Set allergens if provided, else clear
+        if allergens_data is not None and allergens_data != []:
             menu_item.allergens.set(allergens_data)
+        # else:  # Optionally clear if you want to remove all allergens when not provided
+        #     menu_item.allergens.clear()
+
         # Create recipe if ingredients are provided
         if recipe_ingredients_data:
             recipe = Recipe.objects.create(
@@ -774,45 +778,6 @@ class StockTransferSerializer(serializers.ModelSerializer):
         model = StockTransfer
         fields = ['id', 'source_branch', 'source_branch_name', 'target_branch', 'target_branch_name', 'product', 'product_name', 'quantity', 'status', 'notes', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ('created_by', 'created_at', 'updated_at')
-
-class InventoryItemCreateSerializer(serializers.Serializer):
-    TYPE_CHOICES = (
-        ('product', 'Product'),
-        ('menu_item', 'Menu Item'),
-    )
-    type = serializers.ChoiceField(choices=TYPE_CHOICES)
-    product = ProductCreateSerializer(required=False)
-    menu_item = MenuItemCreateSerializer(required=False)
-
-    def validate(self, data):
-        item_type = data.get('type')
-        if item_type == 'product':
-            if not data.get('product'):
-                raise serializers.ValidationError({'product': 'Product data is required.'})
-        elif item_type == 'menu_item':
-            if not data.get('menu_item'):
-                raise serializers.ValidationError({'menu_item': 'Menu item data is required.'})
-        else:
-            raise serializers.ValidationError({'type': 'Invalid type.'})
-        return data
-
-    def create(self, validated_data):
-        item_type = validated_data['type']
-        request = self.context.get('request')
-        if item_type == 'product':
-            product_data = validated_data['product']
-            serializer = ProductCreateSerializer(data=product_data, context=self.context)
-            serializer.is_valid(raise_exception=True)
-            product = serializer.save()
-            return {'type': 'product', 'product': product}
-        elif item_type == 'menu_item':
-            menu_item_data = validated_data['menu_item']
-            serializer = MenuItemCreateSerializer(data=menu_item_data, context=self.context)
-            serializer.is_valid(raise_exception=True)
-            menu_item = serializer.save()
-            return {'type': 'menu_item', 'menu_item': menu_item}
-        else:
-            raise serializers.ValidationError({'type': 'Invalid type.'})
 
 class MinimalCatalogProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)

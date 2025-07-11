@@ -6,6 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import F, Sum, Q, Count
 from django.utils import timezone
 from rest_framework.views import APIView
+import json
 
 from .models import (
     Category, Product, Supplier, InventoryTransaction, InventoryAdjustment,
@@ -20,7 +21,7 @@ from .serializers import (
     ProductImageSerializer, MenuSerializer, MenuItemSerializer, MenuItemCreateSerializer,
     RecipeSerializer, RecipeIngredientSerializer, AllergySerializer,
     ModifierSerializer, ModifierOptionSerializer, MenuItemModifierSerializer,
-    StockCountSerializer, PurchaseOrderSerializer, StockTransferSerializer, InventoryItemCreateSerializer,
+    StockCountSerializer, PurchaseOrderSerializer, StockTransferSerializer,
     MinimalCatalogProductSerializer, MinimalCatalogMenuItemSerializer
 )
 from apps.base.utils import get_request_branch_id
@@ -38,7 +39,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'created_at']
 
-
 class SupplierViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing suppliers.
@@ -49,7 +49,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'contact_person', 'email', 'phone']
     ordering_fields = ['name', 'created_at']
-
 
 class UnitOfMeasureViewSet(viewsets.ModelViewSet):
     """
@@ -62,7 +61,6 @@ class UnitOfMeasureViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'code', 'symbol']
     ordering_fields = ['name', 'code']
 
-
 class AllergyViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing allergies.
@@ -74,7 +72,6 @@ class AllergyViewSet(viewsets.ModelViewSet):
     filterset_fields = ['severity']
     search_fields = ['name', 'description', 'common_in']
     ordering_fields = ['name', 'severity', 'created_at']
-
 
 class ProductViewSet(viewsets.ModelViewSet):
     """
@@ -129,6 +126,51 @@ class ProductViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+    
+    def create(self, request, *args, **kwargs):
+        import json
+        data = request.data    
+        print(data)    
+        # Defensive handling for allergens
+        allergens = data.getlist('allergens') if hasattr(data, 'getlist') else data.get('allergens', [])
+        if isinstance(allergens, list) and len(allergens) == 1 and isinstance(allergens[0], str) and allergens[0].startswith('['):
+            try:
+                parsed = json.loads(allergens[0])
+                if isinstance(parsed, list):
+                    allergens = parsed
+                else:
+                    allergens = []
+            except Exception:
+                allergens = []
+        # Ensure allergens is a list of strings (PKs)
+        if hasattr(data, 'setlist'):
+            data._mutable = True
+            data.setlist('allergens', [str(pk) for pk in allergens])
+        else:
+            data['allergens'] = [str(pk) for pk in allergens]
+        
+        # Defensive handling for initial_stock
+        initial_stock = data.getlist('initial_stock') if hasattr(data, 'getlist') else data.get('initial_stock', [])
+        if isinstance(initial_stock, list) and len(initial_stock) == 1 and isinstance(initial_stock[0], str) and initial_stock[0].startswith('{'):
+            try:
+                parsed = json.loads(initial_stock[0])
+                if isinstance(parsed, dict):
+                    initial_stock = parsed
+                else:
+                    initial_stock = {}
+            except Exception:
+                initial_stock = {}
+        if hasattr(data, 'setlist'):
+            data._mutable = True
+            data['initial_stock'] = initial_stock
+        else:
+            data['initial_stock'] = initial_stock
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     @action(detail=True, methods=['post'])
     def adjust_stock(self, request, pk=None):
@@ -317,7 +359,6 @@ class ProductViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class InventoryTransactionViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing inventory transactions.
@@ -354,7 +395,6 @@ class InventoryTransactionViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-
 
 class BatchViewSet(viewsets.ModelViewSet):
     """
@@ -407,7 +447,6 @@ class BatchViewSet(viewsets.ModelViewSet):
                 'Cannot delete a batch that has stock entries.'
             )
         instance.delete()
-
 
 class BatchStockViewSet(viewsets.ModelViewSet):
     """
@@ -514,7 +553,6 @@ class BatchStockViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-
 class InventoryAdjustmentViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing inventory adjustments.
@@ -620,7 +658,6 @@ class InventoryAdjustmentViewSet(viewsets.ModelViewSet):
             self.get_serializer(adjustment).data,
             status=status.HTTP_200_OK
         )
-
 
 class MenuViewSet(viewsets.ModelViewSet):
     """ViewSet for managing menus."""
@@ -759,7 +796,6 @@ class MenuViewSet(viewsets.ModelViewSet):
         
         return Response(activities)
 
-
 class MenuItemViewSet(viewsets.ModelViewSet):
     """ViewSet for managing menu items."""
     queryset = MenuItem.objects.select_related('menu', 'category', 'created_by')
@@ -782,6 +818,48 @@ class MenuItemViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return MenuItemCreateSerializer
         return MenuItemSerializer
+    
+    def create(self, request, *args, **kwargs):
+        import json
+        data = request.data.copy()
+        # Robust parsing for lists
+        for field in ['allergens', 'recipe_ingredients', 'images']:
+            value = data.get(field)
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        value = parsed
+                    else:
+                        value = []
+                except Exception:
+                    value = []
+            elif value in (None, '', 'null'):
+                value = []
+            data[field] = value
+        # Cast booleans
+        for field in ['is_available', 'is_featured', 'is_vegetarian', 'track_inventory']:
+            value = data.get(field)
+            if isinstance(value, str):
+                data[field] = value.lower() == 'true'
+        # Cast numbers
+        for field in ['category', 'menu', 'servings', 'display_order', 'preparation_time', 'default_image_index']:
+            value = data.get(field)
+            try:
+                data[field] = int(value)
+            except Exception:
+                pass
+        for field in ['selling_price', 'cost_price', 'calories', 'protein', 'carbohydrates', 'fat']:
+            value = data.get(field)
+            try:
+                data[field] = float(value)
+            except Exception:
+                pass
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -841,7 +919,6 @@ class MenuItemViewSet(viewsets.ModelViewSet):
         
         return Response(data)
 
-
 class RecipeViewSet(viewsets.ModelViewSet):
     """ViewSet for managing recipes."""
     queryset = Recipe.objects.select_related('menu_item', 'created_by')
@@ -872,7 +949,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
             serializer.save(recipe=recipe)
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
-
 
 class CatalogView(APIView):
     permission_classes=[permissions.IsAuthenticated]
@@ -954,7 +1030,6 @@ class CatalogView(APIView):
             'page_size': page_size
         })
 
-
 class ModifierViewSet(viewsets.ModelViewSet):
     """ViewSet for managing menu modifiers."""
     queryset = Modifier.objects.select_related('branch', 'created_by').prefetch_related('options', 'menu_items')
@@ -983,7 +1058,6 @@ class ModifierViewSet(viewsets.ModelViewSet):
         serializer = MenuItemSerializer(menu_items, many=True)
         return Response(serializer.data)
 
-
 class ModifierOptionViewSet(viewsets.ModelViewSet):
     """ViewSet for managing modifier options."""
     queryset = ModifierOption.objects.select_related('modifier').prefetch_related('allergens')
@@ -994,7 +1068,6 @@ class ModifierOptionViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'display_order', 'price_adjustment', 'created_at']
 
-
 class MenuItemModifierViewSet(viewsets.ModelViewSet):
     """ViewSet for managing menu item modifiers."""
     queryset = MenuItemModifier.objects.select_related('menu_item', 'modifier')
@@ -1003,7 +1076,6 @@ class MenuItemModifierViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['menu_item', 'modifier', 'is_required']
     ordering_fields = ['display_order', 'created_at']
-
 
 class StockCountViewSet(viewsets.ModelViewSet):
     """API endpoint for managing stock counts."""
@@ -1024,7 +1096,6 @@ class StockCountViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
     queryset = PurchaseOrder.objects.all().prefetch_related('items', 'supplier')
     serializer_class = PurchaseOrderSerializer
@@ -1037,7 +1108,6 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-
 
 class StockTransferViewSet(viewsets.ModelViewSet):
     queryset = StockTransfer.objects.all().select_related('source_branch', 'target_branch', 'product')
@@ -1052,51 +1122,50 @@ class StockTransferViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-
-class ProductImageViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing product images."""
-    queryset = ProductImage.objects.select_related('product')
-    serializer_class = ProductImageSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['product', 'is_default', 'is_active']
-    search_fields = ['product__name']
-    ordering_fields = ['created_at']
-    
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        product_id = self.request.query_params.get('product_id')
-        if product_id:
-            queryset = queryset.filter(product_id=product_id)
-        return queryset
-    
-    def perform_create(self, serializer):
-        # If this image is being set as default, unset other defaults for this product
-        if serializer.validated_data.get('is_default', False):
-            product = serializer.validated_data['product']
-            ProductImage.objects.filter(
-                product=product,
-                is_default=True
-            ).update(is_default=False)
-        
-        serializer.save()
-    
-    def perform_update(self, serializer):
-        # If this image is being set as default, unset other defaults for this product
-        if serializer.validated_data.get('is_default', False):
-            product = serializer.instance.product
-            ProductImage.objects.filter(
-                product=product,
-                is_default=True
-            ).exclude(pk=serializer.instance.pk).update(is_default=False)
-        
-        serializer.save()
-
-
 class InventoryItemCreateAPIView(APIView):
     """API endpoint for creating either a Product or MenuItem from a unified form."""
     def post(self, request, *args, **kwargs):
-        serializer = InventoryItemCreateSerializer(data=request.data, context={'request': request})
+        data = request.data.copy()
+        # Preprocess menu_item fields if present
+        if 'menu_item' in data:
+            menu_item = data
+            for field in ['allergens', 'recipe_ingredients', 'images']:
+                value = menu_item.get(field)
+                # Accept JSON string, empty string, dict, or list
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        if isinstance(parsed, list):
+                            value = parsed
+                        else:
+                            value = []
+                    except Exception:
+                        value = []
+                elif isinstance(value, dict):
+                    value = []
+                elif value in (None, '', 'null'):
+                    value = []
+                menu_item[field] = value
+            # Cast booleans
+            for field in ['is_available', 'is_featured', 'is_vegetarian', 'track_inventory']:
+                value = menu_item.get(field)
+                if isinstance(value, str):
+                    menu_item[field] = value.lower() == 'true'
+            # Cast numbers
+            for field in ['category', 'menu', 'servings', 'display_order', 'preparation_time', 'default_image_index']:
+                value = menu_item.get(field)
+                try:
+                    menu_item[field] = int(value)
+                except Exception:
+                    pass
+            for field in ['selling_price', 'cost_price', 'calories', 'protein', 'carbohydrates', 'fat']:
+                value = menu_item.get(field)
+                try:
+                    menu_item[field] = float(value)
+                except Exception:
+                    pass
+            data['menu_item'] = menu_item
+        serializer = InventoryItemCreateSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             result = serializer.save()
             return Response(result, status=status.HTTP_201_CREATED)

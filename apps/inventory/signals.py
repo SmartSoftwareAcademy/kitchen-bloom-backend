@@ -24,8 +24,9 @@ def create_branch_stock_for_product(sender, instance, created, **kwargs):
                     branch = Branch.objects.get(id=int(branch_id), is_active=True)
                 except Branch.DoesNotExist:
                     continue
-                current_stock = stock_data.get('current_stock', 0)
-                reorder_level = stock_data.get('reorder_level', 0)
+                # Ensure values are floats
+                current_stock = float(stock_data.get('current_stock', 0) or 0)
+                reorder_level = float(stock_data.get('reorder_level', 0) or 0)
                 branch_stock, created_bs = BranchStock.objects.get_or_create(
                     product=instance,
                     branch=branch,
@@ -43,7 +44,7 @@ def create_branch_stock_for_product(sender, instance, created, **kwargs):
                     branch_stock.reorder_level = reorder_level
                     branch_stock.save()
                 # Log initial stock transaction if stock > 0
-                if current_stock and float(current_stock) > 0:
+                if current_stock > 0:
                     InventoryTransaction.objects.create(
                         product=instance,
                         branch=branch,
